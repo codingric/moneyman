@@ -1,0 +1,22 @@
+{% extends "_base.html" %}
+{% block menu %}
+  <a href="{{ url_for('index') }}">Dashboard</a>
+  <a href="{{ url_for('upload') }}">Import</a>
+{% endblock %}
+{% block main %}
+<style>
+  .transaction div {
+    display: table-cell;
+  }
+</style>
+<h2>Tags</h2>
+<table>
+{% for t in tags %}
+<tr>
+  <td>{{ t['name'] }}</td>
+  <td>{{ "${:,.2f}".format(t['budget_amount'])+' '+t['budget_frequency'].name if t['budget_amount'] else 'Unbudgetted' }}</td>
+  <td>{{ t['description'] }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

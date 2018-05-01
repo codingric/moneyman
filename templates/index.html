@@ -1,0 +1,12 @@
+{% extends "_base.html" %}
+{% block menu %}
+<a href="{{ url_for('transactions') }}">Transactions</a>
+{% endblock %}
+{% block main %}
+<h2>Transactions in the last 28 days</h2>
+<ul class="stats">
+  <li><label>Count:</label><span>{{ count }}</span></li>
+  <li><label>Money in:</label><span>{{ "${:,.2f}".format(positive) }}</span></li>
+  <li><label>Money out:</label><span>{{"${:,.2f}".format(negative) }}</span></li>
+</ul>
+{% endblock %}

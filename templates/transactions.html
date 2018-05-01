@@ -1,0 +1,23 @@
+{% extends "_base.html" %}
+{% block menu %}
+  <a href="{{ url_for('index') }}">Dashboard</a>
+  <a href="{{ url_for('upload') }}">Import</a>
+{% endblock %}
+{% block main %}
+<style>
+  .transaction div {
+    display: table-cell;
+  }
+</style>
+<h2>Transactions</h2>
+<table>
+{% for t in transactions %}
+<tr>
+  <td>{{ t['date'] }}</td>
+  <td>{{ "${:,.2f}".format(t['amount']) }}</td>
+  <td>{{ t['description'] }}</td>
+  <td>{{ t['tag'] }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

@@ -8,7 +8,7 @@ INGDIRECT_CONFIG = {
   "description": lambda r: str(re.search("^.*(?= - Receipt)", r['Description']).group(0) if ' - Receipt ' in r['Description'] else r['Description']).decode("utf-8", "ignore"),
   "ref": lambda r: hashlib.md5("%s %s %s" % (r['Date'], r['Account'], r['Description'])).hexdigest(),
   "amount": lambda r: float(r['Credit'] if r['Credit'] else r['Debit']),
-  "account": "Account"
+  "account": lambda r: int(r["Account"])
 }
 
 class Importer:

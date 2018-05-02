@@ -47,24 +47,45 @@ def field2json(v):
 @app.route('/')
 def index():
     sql = text("""
-      SELECT 
-        count(id), 
-        sum(case when amount > 0 then amount end),
-        sum(case when amount < 0 then amount end)
-      FROM transactions 
-      WHERE date > datetime('now', '-28 days')""")
-    c, p, n = db_session.execute(sql).first()
-    return render_template("index.html", count=c, positive=p, negative=n)
-
+      SELECT
+        ifnull(tag, 'No Tag') as tag,
+        sum(amount) as total
+      FROM transactions
+      WHERE date > datetime('now', '-28 days')
+      GROUP BY tag
+      ORDER BY 2""")
+    stats = db_session.execute(sql)
+    return render_template("index.html", stats = stats)
 
 
 @app.route('/tags')
 def tags():
   return render_template('tag.html', tags=Tag.query.order_by(Tag.name.asc()).all())
 
-@app.route('/transactions')
+@app.route('/transactions', methods=['GET', 'POST'])
 def transactions():
-  return render_template('transactions.html', transactions=Transaction.query.filter(Transaction.date >= date.today() - timedelta(days=28)).filter(not_(Transaction.tag.in_(['Exclude']))).order_by(Transaction.date.desc()).all())
+  if request.method == 'POST':
+    t = Transaction.query.get(int(request.form.get('trans_id')))
+    t.tag = None
+    newtag = request.form.get('tag')
+    if newtag != '':
+      t.tag = newtag
+    
+    db_session.add(t)
+    db_session.commit()
+    print(url_for('transactions', _anchor="trans%d"%t.id))
+    return redirect(url_for('transactions', _anchor="trans%d"%t.id))
+  sql = text("""
+    SELECT
+      t.*,
+      a.name as account_name
+    FROM transactions t
+    JOIN accounts a ON a.number = t.account
+    WHERE date > datetime('now', '-28 days')
+      AND (t.tag IS NULL OR t.tag != 'Exclude')
+    ORDER BY date DESC""")
+  transactions = db_session.execute(sql)
+  return render_template('transactions.html', transactions=transactions)
 
 @app.route('/api/transactions')
 def api_transactions():
@@ -81,7 +102,7 @@ def upload():
 
     ref, id, last_date = db_session.query(Transaction.ref, Transaction.id, func.max(Transaction.date)).first()
 
-    matchers = [ (re.compile(m[0].encode('utf-8')), m[1]) for m in db_session.query(Matcher.regex, Matcher.tag).all() ]
+    matchers = [ (re.compile(m[0].encode('utf-8')), m[1], m[2]) for m in db_session.query(Matcher.regex,Matcher.account,Matcher.tag).all() ]
 
     i = Importer(INGDIRECT_CONFIG, file_path="./import.csv")
     imported = 0
@@ -89,7 +110,7 @@ def upload():
       if row['ref'] == ref:
         break
       transaction = Transaction(**row)
-      transaction.tag = find_match(transaction.description.encode('utf-8'), matchers)
+      transaction.tag = find_match(transaction, matchers)
       db_session.add(transaction)
       imported += 1
 
@@ -99,8 +120,8 @@ def upload():
   return render_template('upload.html')
 
 def find_match(t, m):
-  for r, v in m:
-    if r.match(t):
+  for r, a, v in m:
+    if (a==None or t.account==a) and r.match(t.description.encode('utf-8')):
       print('match %s %s' % (t, v))
       return v
   return None

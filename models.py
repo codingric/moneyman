@@ -16,7 +16,7 @@ class Transaction(Base):
   id = Column(Integer, primary_key=True, autoincrement=True)
   ref = Column(String(32), unique=True)
   description = Column(String())
-  account = Column(String(64))
+  account = Column(Integer)
   amount = Column(Float())
   tag = Column(String(128))
   date = Column(Date)
@@ -38,3 +38,11 @@ class Matcher(Base):
   name = Column(String())
   regex = Column(String())
   tag = Column(String(128))
+  account = Column(Integer())
+
+class Account(Base):
+  __tablename__ = 'accounts'
+  number = Column(Integer, primary_key=True)
+  name = Column(String())
+  balance = Column(Float())
+  balance_date = Column(Date)

@@ -4,9 +4,17 @@
 {% endblock %}
 {% block main %}
 <h2>Transactions in the last 28 days</h2>
-<ul class="stats">
-  <li><label>Count:</label><span>{{ count }}</span></li>
-  <li><label>Money in:</label><span>{{ "${:,.2f}".format(positive) }}</span></li>
-  <li><label>Money out:</label><span>{{"${:,.2f}".format(negative) }}</span></li>
-</ul>
+
+<table>
+<tr>
+  <th>Tag</th>
+  <th>Balance</th>
+</tr>
+{% for stat in stats %}
+  <tr>
+    <td>{{ stat['tag'] }}</td>
+    <td>{{ "$ {:,.2f}".format(stat['total']) }}</td>
+  </tr>
+{% endfor %}
+</table>
 {% endblock %}

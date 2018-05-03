@@ -12,6 +12,7 @@ from datetime import date, timedelta
 import uuid
 import re
 
+
 app = Flask(__name__)
 app.secret_key = "lkaskdvmiiv887773n3nmnvfdv"
 
@@ -48,12 +49,16 @@ def field2json(v):
 def index():
     sql = text("""
       SELECT
-        ifnull(tag, 'No Tag') as tag,
-        sum(amount) as total
-      FROM transactions
-      WHERE date > datetime('now', '-28 days')
-      GROUP BY tag
-      ORDER BY 2""")
+        t.tag as tag,
+        CAST(sum(t.amount) AS FLOAT) as total,
+        CAST(ifnull(budget, 0) AS FLOAT) as budget,
+        CAST(abs(ifnull(budget, 0))-abs(sum(t.amount)) AS FLOAT) as variance
+      FROM transactions t
+      LEFT JOIN monthly_budget b ON t.tag = b.tag
+      WHERE t.date > datetime('now', '-28 days')
+      GROUP BY t.tag
+      ORDER BY 2
+      """)
     stats = db_session.execute(sql)
     return render_template("index.html", stats = stats)
 
@@ -61,6 +66,48 @@ def index():
 @app.route('/tags')
 def tags():
   return render_template('tag.html', tags=Tag.query.order_by(Tag.name.asc()).all())
+
+@app.route('/tags', methods=['POST'])
+def post_tags():
+  if request.form.get('_method','').upper() == 'PUT':
+    return 'PUT'
+
+  if request.form.get('_method','').upper() == 'DELETE':
+    name = request.form.get('tag_name')
+    if not name:
+      flash('No tag name supplied', 'error')
+      return redirect(url_for('tags'))
+    t = Tag.query.get(name)
+    if not t:
+      flash("%s doesn't exist" % name, 'error')
+      return redirect(url_for('tags'))
+    db_session.delete(t)
+    db_session.commit()
+    flash('%s removed'%name, 'ok')
+    return redirect(url_for('tags'))
+
+  if not request.form['tag'] or not request.form['name']:
+    flash('Required fields missing', 'error')
+    return redirect(url_for('tags'))
+
+  b = request.form.get('budget_amount')
+  f = request.form.get('budget_frequency')
+  b = float(b)
+  f = FrequencyEnum[f]
+  
+  obj = Tag(
+    name=request.form['name'],
+    tag=request.form['tag'],
+    budget_amount=b,
+    budget_frequency=f,
+    description=request.form['description']
+  )
+  
+  db_session.add(obj)
+  db_session.commit()
+
+  flash('New tag created', 'ok')
+  return redirect(url_for('tags'))
 
 @app.route('/transactions', methods=['GET', 'POST'])
 def transactions():
@@ -74,7 +121,15 @@ def transactions():
     db_session.add(t)
     db_session.commit()
     print(url_for('transactions', _anchor="trans%d"%t.id))
-    return redirect(url_for('transactions', _anchor="trans%d"%t.id))
+    return redirect(url_for('transactions', tag=request.args.get('tag'),_anchor="trans%d"%t.id))
+  tag_filter = "(t.tag IS NULL OR t.tag != 'Exclude')"
+
+  if request.args.get('tag'):
+    if request.args.get('tag') == '__Empty__':
+      tag_filter = "t.tag IS NULL"
+    else: 
+      tag_filter = "t.tag = '{}'".format(request.args.get('tag'))
+
   sql = text("""
     SELECT
       t.*,
@@ -82,8 +137,8 @@ def transactions():
     FROM transactions t
     JOIN accounts a ON a.number = t.account
     WHERE date > datetime('now', '-28 days')
-      AND (t.tag IS NULL OR t.tag != 'Exclude')
-    ORDER BY date DESC""")
+      AND {tag_filter}
+    ORDER BY date DESC""".format(tag_filter=tag_filter))
   transactions = db_session.execute(sql)
   return render_template('transactions.html', transactions=transactions)
 

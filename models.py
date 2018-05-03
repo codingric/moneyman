@@ -5,7 +5,7 @@ import enum
 class FrequencyEnum(enum.Enum):
   daily = 365.25
   weekly = 365.25/7
-  fornightly = 365.25/14
+  fortnightly = 365.25/14
   monthly = 12
   quarterly = 4
   biannually = 2
@@ -31,6 +31,7 @@ class Tag(Base):
   description = Column(String())
   budget_amount = Column(Float())
   budget_frequency = Column(Enum(FrequencyEnum))
+  tag = Column(String(128))
 
 class Matcher(Base):
   __tablename__ = 'matchers'

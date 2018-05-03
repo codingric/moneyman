@@ -1,6 +1,7 @@
 {% extends "_base.html" %}
 {% block menu %}
 <a href="{{ url_for('transactions') }}">Transactions</a>
+<a href="{{ url_for('tags') }}">Tags</a>
 {% endblock %}
 {% block main %}
 <h2>Transactions in the last 28 days</h2>
@@ -9,11 +10,15 @@
 <tr>
   <th>Tag</th>
   <th>Balance</th>
+  <th>Budget</th>
+  <th>Variance</th>
 </tr>
 {% for stat in stats %}
   <tr>
-    <td>{{ stat['tag'] }}</td>
+    <td><a href="{{url_for("transactions", tag=(stat['tag'] or '__Empty__'))}}">{{ stat['tag'] or 'No Tag'}}</a></td>
     <td>{{ "$ {:,.2f}".format(stat['total']) }}</td>
+    <td>{{ "$ {:,.2f}".format(stat['budget']) }}</td>
+    <td>{{ "$ {:,.2f}".format(stat['variance']) }}</td>
   </tr>
 {% endfor %}
 </table>

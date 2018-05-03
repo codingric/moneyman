@@ -10,6 +10,9 @@
   }
 </style>
 <h2>Transactions</h2>
+{% if request.args.get('tag') %}
+<a href="{{url_for("transactions")}}">Clear filter</a>
+{% endif %}
 <table>
 <tr>
   <th>Date</th>

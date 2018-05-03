@@ -1,6 +1,6 @@
 {% extends "_base.html" %}
 {% block menu %}
-  <a href="{{ url_for('index') }}">Dashboard</a>
+  <a href="{{ url_for('index') }}">Report</a>
   <a href="{{ url_for('upload') }}">Import</a>
 {% endblock %}
 {% block main %}
@@ -9,7 +9,7 @@
     display: table-cell;
   }
 </style>
-<h2>Transactions</h2>
+<h2>Spending since {{start_date}}</h2>
 {% if request.args.get('tag') %}
 <a href="{{url_for("transactions")}}">Clear filter</a>
 {% endif %}

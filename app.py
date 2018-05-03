@@ -11,7 +11,7 @@ from sqlalchemy.ext.serializer import loads, dumps
 from datetime import date, timedelta
 import uuid
 import re
-
+from  dateutil.relativedelta import relativedelta
 
 app = Flask(__name__)
 app.secret_key = "lkaskdvmiiv887773n3nmnvfdv"
@@ -47,6 +47,7 @@ def field2json(v):
 
 @app.route('/')
 def index():
+    start_date = date.today() + relativedelta(months=-1)
     sql = text("""
       SELECT
         t.tag as tag,
@@ -55,12 +56,12 @@ def index():
         CAST(abs(ifnull(budget, 0))-abs(sum(t.amount)) AS FLOAT) as variance
       FROM transactions t
       LEFT JOIN monthly_budget b ON t.tag = b.tag
-      WHERE t.date > datetime('now', '-28 days')
+      WHERE t.date > '{start_date}'
       GROUP BY t.tag
       ORDER BY 2
-      """)
+      """.format(start_date=start_date.isoformat()))
     stats = db_session.execute(sql)
-    return render_template("index.html", stats = stats)
+    return render_template("index.html", stats = stats, start_date=start_date)
 
 
 @app.route('/tags')
@@ -130,17 +131,18 @@ def transactions():
     else: 
       tag_filter = "t.tag = '{}'".format(request.args.get('tag'))
 
+  start_date = date.today() + relativedelta(months=-1)
   sql = text("""
     SELECT
       t.*,
       a.name as account_name
     FROM transactions t
     JOIN accounts a ON a.number = t.account
-    WHERE date > datetime('now', '-28 days')
+    WHERE date > '{start_date}'
       AND {tag_filter}
-    ORDER BY date DESC""".format(tag_filter=tag_filter))
+    ORDER BY date DESC""".format(tag_filter=tag_filter, start_date=start_date))
   transactions = db_session.execute(sql)
-  return render_template('transactions.html', transactions=transactions)
+  return render_template('transactions.html', transactions=transactions, start_date=start_date)
 
 @app.route('/api/transactions')
 def api_transactions():

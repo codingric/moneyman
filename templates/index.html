@@ -1,15 +1,15 @@
 {% extends "_base.html" %}
 {% block menu %}
-<a href="{{ url_for('transactions') }}">Transactions</a>
-<a href="{{ url_for('tags') }}">Tags</a>
+<a href="{{ url_for('transactions') }}">Spending</a>
+<a href="{{ url_for('tags') }}">Budget</a>
 {% endblock %}
 {% block main %}
-<h2>Transactions in the last 28 days</h2>
+<h2>Spending Report (since {{ start_date }})</h2>
 
 <table>
 <tr>
   <th>Tag</th>
-  <th>Balance</th>
+  <th>Spenditure</th>
   <th>Budget</th>
   <th>Variance</th>
 </tr>

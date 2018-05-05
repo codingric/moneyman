@@ -1,7 +1,4 @@
 {% extends "_base.html" %}
-{% block menu %}
-<a href="{{ url_for('transactions') }}">Transactions</a>
-{% endblock %}
 {% block main %}
 <form method=post enctype=multipart/form-data>
 <p><input type=file name=csv>

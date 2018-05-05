@@ -27,7 +27,8 @@ class Transaction(Base):
 
 class Tag(Base):
   __tablename__ = 'tags'
-  name = Column(String(64), primary_key=True)
+  id = Column(Integer, primary_key=True, autoincrement=True)
+  name = Column(String(64))
   description = Column(String())
   budget_amount = Column(Float())
   budget_frequency = Column(Enum(FrequencyEnum))

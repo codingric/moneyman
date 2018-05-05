@@ -1,0 +1,100 @@
+{% extends "_base.html" %}
+{% block main %}
+<style>
+  .transaction div {
+    display: table-cell;
+  }
+</style>
+<h2>Budgets</h2>
+<table class="pure-table">
+<thead>
+<tr>
+  <th>Name</th>
+  <th>Budget</th>
+  <th>Tag</th>
+  <th>Description</th>
+  <th>Actions</th>
+</tr>
+</thead>
+<tbody>
+{% for t in tags %}
+<tr>
+  <td>
+    <div class="editable">
+      <span class="read">{{ t['name'] }}</span>
+      <form class="write" method="POST" action="{{url_for('tag', tag_id=t['id'])}}">
+        <input type="hidden" name="_method" value="PATCH"/>
+        <input type="hidden" name="_csrf_token" value="{{csrf_token()}}"/>
+        <input class="submitter" type="text" name="name" value="{{t['name'] or ''}}"/>
+      </form>
+    </div>
+</td>
+  <td>
+    <div class="editable">
+      <span class="read">
+        {{ "${:,.2f}".format(t['budget_amount'])+' '+t['budget_frequency'].name if t['budget_amount'] else 'Unbudgetted' }}
+      </span>
+      <form class="write" method="POST" action="{{url_for('tag', tag_id=t['id'])}}">
+        <input type="hidden" name="_method" value="PATCH"/>
+        <input type="hidden" name="_csrf_token" value="{{csrf_token()}}"/>
+        <input class="submitter" type="text" name="budget_amount" value="{{t['budget_amount']}}"/>
+        <select name="budget_frequency">
+          <option value="weekly" {{ 'selected' if t['budget_frequency'].name == 'weekly'}}>weekly</option>
+          <option value="fortnightly" {{ 'selected' if t['budget_frequency'].name == 'fortnightly'}}>fortnightly</option>
+          <option value="monthly" {{ 'selected' if t['budget_frequency'].name == 'monthly'}}>monthly</option>
+          <option value="quarterly {{ 'selected' if t['budget_frequency'].name == 'quarterly'}}">quarterly</option>
+          <option value="biannually" {{ 'selected' if t['budget_frequency'].name == 'biannually'}}>biannually</option>
+          <option value="annually" {{ 'selected' if t['budget_frequency'].name == 'annually'}}>annually</option>
+        </select>
+      </form>
+    </div>
+  </td>
+  <td>
+    <div class="editable">
+      <span class="read">{{ t['tag'] or 'No tag' }}</span>
+      <form class="write" method="POST" action="{{url_for('tag', tag_id=t['id'])}}">
+        <input type="hidden" name="_method" value="PATCH"/>
+        <input type="hidden" name="_csrf_token" value="{{csrf_token()}}"/>
+        <input class="submitter" type="text" name="tag" value="{{t['tag'] or ''}}"/>
+      </form>
+    </div>
+  </td>
+  <td>
+    <div class="editable">
+      <span class="read">{{ t['description'] or 'No description' }}</span>
+      <form class="write" method="POST" action="{{url_for('tag', tag_id=t['id'])}}">
+        <input type="hidden" name="_method" value="PATCH"/>
+        <input type="hidden" name="_csrf_token" value="{{csrf_token()}}"/>
+        <textarea class="submitter" name="description">{{t['description'] or ''}}</textarea>
+      </form>
+    </div>
+  </td>
+  <td>
+    <form class="inline" method="POST" action="{{url_for('tag', tag_id=t['id'])}}">
+      <input type="hidden" name="_csrf_token" value="{{csrf_token()}}"/>
+      <input type="hidden" name="_method" value="DELETE"/>
+      <button class="confirm pure-button-primary" type="submit">Delete</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+<h3>New budget</h3>
+<form class="standalone" method="POST">
+  <input type="hidden" name="_csrf_token" value="{{csrf_token()}}"/>
+  <li><label for="name">Name:</label><input type="text" name="name" value=""/></li>
+  <li><label for="description">Description:</label><textarea name="description"></textarea></li>
+  <li><label for="name">Budget:</label><input type="text" name="budget_amount" value=""/>
+  <select name="budget_frequency">
+    <option value="weekly">weekly</option>
+    <option value="fortnightly">fortnightly</option>
+    <option value="monthly">monthly</option>
+    <option value="quarterly">quarterly</option>
+    <option value="biannually">biannually</option>
+    <option value="annually">annually</option>
+  </select></li>
+  <li><label for="tag">Tag:</label><input type="text" name="tag" value=""/></li>
+  <li class="buttons"><button class="pure-button-primary" type="submit">Create new budget</button></li>
+</form>
+{% endblock %}

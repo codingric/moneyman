@@ -15,6 +15,7 @@ from  dateutil.relativedelta import relativedelta
 
 app = Flask(__name__)
 app.secret_key = "lkaskdvmiiv887773n3nmnvfdv"
+app.config['DEBUG'] = True
 
 @app.before_request
 def csrf_protect():
@@ -70,22 +71,6 @@ def tags():
 
 @app.route('/tags', methods=['POST'])
 def post_tags():
-  if request.form.get('_method','').upper() == 'PUT':
-    return 'PUT'
-
-  if request.form.get('_method','').upper() == 'DELETE':
-    name = request.form.get('tag_name')
-    if not name:
-      flash('No tag name supplied', 'error')
-      return redirect(url_for('tags'))
-    t = Tag.query.get(name)
-    if not t:
-      flash("%s doesn't exist" % name, 'error')
-      return redirect(url_for('tags'))
-    db_session.delete(t)
-    db_session.commit()
-    flash('%s removed'%name, 'ok')
-    return redirect(url_for('tags'))
 
   if not request.form['tag'] or not request.form['name']:
     flash('Required fields missing', 'error')
@@ -109,6 +94,33 @@ def post_tags():
 
   flash('New tag created', 'ok')
   return redirect(url_for('tags'))
+
+
+@app.route('/tag/<int:tag_id>', methods=['POST'])
+def tag(tag_id):
+
+  t = Tag.query.get(tag_id)
+  data = { k: v for k, v in request.form.to_dict().iteritems() if hasattr(t, k) }
+
+  if request.form.get('_method','').upper() == 'PATCH':
+    for k, v in data.iteritems():
+      if k == "budget_amount":
+        v = float(v)
+      print "UPDATING: ", k, v
+      setattr(t, k, v)
+  
+    db_session.add(t)
+    db_session.commit()
+    return redirect(url_for('tags'))
+
+  if request.form.get('_method','').upper() == 'DELETE':
+    t = Tag.query.get(tag_id)
+    if not t:
+      return 'Tag not found', 404
+    db_session.delete(t)
+    db_session.commit()
+    return redirect(url_for('tags'))
+  return 'Not allowed', 405
 
 @app.route('/transactions', methods=['GET', 'POST'])
 def transactions():

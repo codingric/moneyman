@@ -2,10 +2,11 @@ import re
 import csv
 import hashlib
 import datetime
+import string
 
 INGDIRECT_CONFIG = {
   "date": lambda r: datetime.datetime.strptime(r['Date'], "%d/%m/%Y"),
-  "description": lambda r: str(re.search("^.*(?= - Receipt)", r['Description']).group(0) if ' - Receipt ' in r['Description'] else r['Description']).decode("utf-8", "ignore"),
+  "description": lambda r: ''.join([x if x in string.printable else '' for x in (str(re.search("^.*(?= - Receipt)", r['Description']).group(0) if ' - Receipt ' in r['Description'] else r['Description']))]),
   "ref": lambda r: hashlib.md5("%s %s %s" % (r['Date'], r['Account'], r['Description'])).hexdigest(),
   "amount": lambda r: float(r['Credit'] if r['Credit'] else r['Debit']),
   "account": lambda r: int(r["Account"])

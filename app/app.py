@@ -52,9 +52,9 @@ def index():
     sql = text("""
       SELECT
         t.tag as tag,
-        CAST(sum(t.amount) AS FLOAT) as total,
-        CAST(ifnull(budget, 0) AS FLOAT) as budget,
-        CAST(abs(ifnull(budget, 0))-abs(sum(t.amount)) AS FLOAT) as variance
+        CAST(sum(t.amount) AS DECIMAL(10,2)) as total,
+        CAST(ifnull(budget, 0) AS DECIMAL(10,2)) as budget,
+        CAST(abs(ifnull(budget, 0))-abs(sum(t.amount)) AS DECIMAL(10,2)) as variance
       FROM transactions t
       LEFT JOIN monthly_budget b ON t.tag = b.tag
       WHERE t.date > '{start_date}'
@@ -149,7 +149,7 @@ def transactions():
       t.*,
       a.name as account_name
     FROM transactions t
-    JOIN accounts a ON a.number = t.account
+    LEFT JOIN accounts a ON t.account = a.number
     WHERE date > '{start_date}'
       AND {tag_filter}
     ORDER BY date DESC""".format(tag_filter=tag_filter, start_date=start_date))

@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 import os
-engine = create_engine('sqlite:///moneyman.db', echo=True)
+engine = create_engine('mysql+pymysql://market:show-me-the-money@market.cl87rnyncckc.ap-southeast-2.rds.amazonaws.com/moneyman', encoding='utf-8')
 db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=False,
                                          bind=engine))

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>{% block title %}moneyman{% endblock %}</title>
+  <title>{% block title %}Ricardo and Helen's Wedding{% endblock %}</title>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="{{url_for('static', filename='main.css')}}" type="text/css" />
   <link rel="stylesheet" href="https://unpkg.com/purecss@1.0.0/build/pure-min.css" integrity="sha384-nn4HPE8lTHyVtfCBi5yW9d20FjT8BJwUXyWZT9InLYax14RDjBj46LmSztkmNP9w" crossorigin="anonymous">
@@ -11,68 +11,7 @@
 </head>
 
 <body>
-<script>
-$(document).ready(function(){
-  $(".read").click(function() {
-    $(this).hide();
-    $(this).next('.write').show();  
-    $(this).next('.write').find('.submitter').focus();
-  });
-
-  $(".write .submitter").keydown(function(event) {
-    if (event.which == 13) {
-      $(this).parent().submit();
-      return true;
-    }
-    if (event.which == 27) {
-      $(this).parent().prev('.read').show()
-      $(this).parent().hide();
-      return false;
-    }
-  });
-  $("button.confirm").click(function(e) {
-    if (!confirm("Are you sure?")) {
-      e.stopPropagation(); 
-      return false;
-    }
-    return true;
-  });  
-});
-</script>
-<style>
-.write {
-  display: none;
-}
-</style>
-{% with messages = get_flashed_messages() %}
-  {% if messages %}
-    <ul class=flashes>
-    {% for message in messages %}
-      <li>{{ message }}</li>
-    {% endfor %}
-    </ul>
-  {% endif %}
-{% endwith %}
-<nav>
-{% block menu %}
-<div class="pure-menu pure-menu-horizontal">
-    <ul class="pure-menu-list">
-        <li class="pure-menu-item {{ 'pure-menu-selected' if request.path == url_for('index') }}">
-          <a href="{{ url_for('index') }}" class="pure-menu-link">Report</a>
-        </li>
-        <li class="pure-menu-item {{ 'pure-menu-selected' if request.path == url_for('transactions') }}">
-          <a href="{{ url_for('transactions') }}" class="pure-menu-link">Spending</a>
-        </li>
-        <li class="pure-menu-item {{ 'pure-menu-selected' if request.path == url_for('tags') }}">
-          <a href="{{ url_for('tags') }}" class="pure-menu-link">Budget</a>
-        </li>
-        <li class="pure-menu-item {{ 'pure-menu-selected' if request.path == url_for('upload') }}">
-          <a href="{{ url_for('upload') }}" class="pure-menu-link">Import</a>
-        </li>
-    </ul>
-</div>
-{% endblock %}
-</nav>
+<script></script>
 <main>
 {% block main %}{% endblock %}
 </main>

@@ -2,6 +2,7 @@ from sqlalchemy import Column, Float, Integer, String, Date, Enum
 from database import Base
 import enum
 
+
 class FrequencyEnum(enum.Enum):
   daily = 365.25
   weekly = 365.25/7
@@ -12,7 +13,7 @@ class FrequencyEnum(enum.Enum):
   annually = 1
 
 class Transaction(Base):
-  __tablename__ = 'transactions'
+  __tablename__ = 'transaction'
   id = Column(Integer, primary_key=True, autoincrement=True)
   ref = Column(String(32), unique=True)
   description = Column(String(1024))
@@ -21,21 +22,17 @@ class Transaction(Base):
   tag = Column(String(128))
   date = Column(Date)
 
-  def __init__(self, **kwargs):
-    for k, v in kwargs.iteritems():
-      setattr(self, k, v)
-
-class Tag(Base):
-  __tablename__ = 'tags'
+class Budget(Base):
+  __tablename__ = 'budget'
   id = Column(Integer, primary_key=True, autoincrement=True)
   name = Column(String(64))
   description = Column(String(1024))
   budget_amount = Column(Float())
-  budget_frequency = Column(Enum(FrequencyEnum))
+  budget_frequency = Column(String(32))
   tag = Column(String(128))
 
 class Matcher(Base):
-  __tablename__ = 'matchers'
+  __tablename__ = 'matcher'
   id = Column(Integer, primary_key=True, autoincrement=True)
   name = Column(String(128))
   regex = Column(String(1024))
@@ -43,7 +40,7 @@ class Matcher(Base):
   account = Column(Integer())
 
 class Account(Base):
-  __tablename__ = 'accounts'
+  __tablename__ = 'account'
   number = Column(Integer, primary_key=True)
   name = Column(String(128))
   balance = Column(Float())

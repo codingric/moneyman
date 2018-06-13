@@ -3,12 +3,12 @@ import flask
 from models import *
 from database import db_session as s
 
-app = flask.Flask(__name__)
+app = flask.Flask(__name__, static_folder="../static/dist")
 manager = flask_restless.APIManager(app, session=s)
 
 @app.route('/')
 def react():
-    return render_template("react.html")
+    return flask.render_template("react.html")
 
 account_api = manager.create_api(Account, methods=['GET', 'PATCH', 'POST', 'DELETE'])
 trans_api = manager.create_api(Transaction, methods=['GET', 'PATCH', 'POST', 'DELETE'])

@@ -13,7 +13,7 @@ class FrequencyEnum(enum.Enum):
   annually = 1
 
 class Transaction(Base):
-  __tablename__ = 'transaction'
+  __tablename__ = 'transactions'
   id = Column(Integer, primary_key=True, autoincrement=True)
   ref = Column(String(32), unique=True)
   description = Column(String(1024))
@@ -23,7 +23,7 @@ class Transaction(Base):
   date = Column(Date)
 
 class Budget(Base):
-  __tablename__ = 'budget'
+  __tablename__ = 'budgets'
   id = Column(Integer, primary_key=True, autoincrement=True)
   name = Column(String(64))
   description = Column(String(1024))
@@ -32,7 +32,7 @@ class Budget(Base):
   tag = Column(String(128))
 
 class Matcher(Base):
-  __tablename__ = 'matcher'
+  __tablename__ = 'matchers'
   id = Column(Integer, primary_key=True, autoincrement=True)
   name = Column(String(128))
   regex = Column(String(1024))
@@ -40,7 +40,7 @@ class Matcher(Base):
   account = Column(Integer())
 
 class Account(Base):
-  __tablename__ = 'account'
+  __tablename__ = 'accounts'
   number = Column(Integer, primary_key=True)
   name = Column(String(128))
   balance = Column(Float())

@@ -1,22 +1,21 @@
-FROM alpine:3.6
+FROM python:3.8.6-alpine3.12
 MAINTAINER Ricardo Salinas <ricardo@salinas.id.au>
 
 COPY requirements.txt /tmp/requirements.txt
-RUN apk add --no-cache py2-pip \
-    && pip install --upgrade pip \
-    && pip install flask \
-    && pip install -r /tmp/requirements.txt
+RUN pip3 install --upgrade pip \
+    && pip3 install flask \
+    && pip3 install -r /tmp/requirements.txt
 
 ENV APP_DIR /app
 ENV FLASK_APP app.py
 RUN mkdir ${APP_DIR}
 COPY app ${APP_DIR}
 
-VOLUME ${APP_DIR}
+#VOLUME ${APP_DIR}
 EXPOSE 5000
 
 # Cleanup
 RUN rm -rf /.wh /root/.cache /var/cache /tmp/requirements.txt
 
 WORKDIR ${APP_DIR}
-CMD ["/usr/bin/flask", "run", "--reload", "-h", " 0.0.0.0"]
+CMD ["/usr/local/bin/flask", "run", "--reload", "--host", "0.0.0.0"]

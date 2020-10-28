@@ -106,7 +106,7 @@ def tag(tag_id):
     for k, v in data.iteritems():
       if k == "budget_amount":
         v = float(v)
-      print "UPDATING: ", k, v
+      print("UPDATING: ", k, v)
       setattr(t, k, v)
   
     db_session.add(t)

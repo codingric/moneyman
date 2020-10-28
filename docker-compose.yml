@@ -7,3 +7,5 @@ services:
     - mode: host
       target: 5000
       published: 32100
+    volumes:
+    - "/Users/ricardo/src/moneyman/database:/mnt/database"

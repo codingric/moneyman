@@ -2,3 +2,5 @@ Flask
 flask_restless
 SQLAlchemy
 pymysql
+flask_sqlalchemy
+flask_jwt

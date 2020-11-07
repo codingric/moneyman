@@ -18,4 +18,4 @@ EXPOSE 5000
 RUN rm -rf /.wh /root/.cache /var/cache /tmp/requirements.txt
 
 WORKDIR ${APP_DIR}
-CMD ["/usr/local/bin/flask", "run", "--reload", "--host", "0.0.0.0"]
+CMD ["python", "test.py"]

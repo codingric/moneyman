@@ -4,8 +4,7 @@ services:
     image: registry.salinas.id.au/moneyman
     build: .
     ports:
-    - mode: host
-      target: 5000
-      published: 32100
+    - "5000:5000"
     volumes:
-    - "/Users/ricardo/src/moneyman/database:/mnt/database"
+    - "../moneyman/build/static:/app/static"
+    - "../moneyman/dist:/app/dist"

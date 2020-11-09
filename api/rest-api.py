@@ -9,7 +9,7 @@ from flask_jwt import JWT, jwt_required, current_identity
 DATABASE = os.environ.get('DATABASE','sqlite:////tmp/moneyman.sqlite')
 
 # Create the Flask application and the Flask-SQLAlchemy object.
-app = flask.Flask(__name__,static_folder="./static/dist")
+app = flask.Flask(__name__,static_folder="./dist")
 app.config['DEBUG'] = True
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE
 app.config["JWT_SECRET_KEY"] = "6174AF5FAD1CAF4E7558DB85343FEC509CDC8C719FD6D9DD57329EF9A7D1BB51"

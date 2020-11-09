@@ -3,13 +3,15 @@ MAINTAINER Ricardo Salinas <ricardo@salinas.id.au>
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install --upgrade pip \
-    && pip3 install flask \
     && pip3 install -r /tmp/requirements.txt
 
 ENV APP_DIR /app
-ENV FLASK_APP app.py
-RUN mkdir ${APP_DIR}
-COPY app ${APP_DIR}
+
+RUN mkdir -p ${APP_DIR}/templates ${APP_DIR}/static
+COPY templates ${APP_DIR}/templates
+COPY *.py ${APP_DIR}
+
+#COPY static ${APP_DIR}
 
 #VOLUME ${APP_DIR}
 EXPOSE 5000
@@ -18,4 +20,4 @@ EXPOSE 5000
 RUN rm -rf /.wh /root/.cache /var/cache /tmp/requirements.txt
 
 WORKDIR ${APP_DIR}
-CMD ["python", "test.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "rest-api:app"]

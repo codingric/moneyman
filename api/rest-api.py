@@ -5,6 +5,7 @@ from sqlalchemy import Column, Float, Integer, String, Date, Enum, Unicode
 import enum
 import os
 from flask_jwt import JWT, jwt_required, current_identity
+from flask_cors import CORS
 
 DATABASE = os.environ.get('DATABASE','sqlite:////tmp/moneyman.sqlite')
 
@@ -14,6 +15,7 @@ app.config['DEBUG'] = True
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE
 app.config["JWT_SECRET_KEY"] = "6174AF5FAD1CAF4E7558DB85343FEC509CDC8C719FD6D9DD57329EF9A7D1BB51"
 db = flask_sqlalchemy.SQLAlchemy(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 class User(object):
 
@@ -65,29 +67,38 @@ class Transfer(db.Model):
     tag = Column(String(128))
     date = Column(Date)
 
-class Payment(db.Model):
-    __tablename__ = 'payment'
+class Due(db.Model):
+    __tablename__ = 'due'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'))
-    plan = db.relationship('Plan', backref=db.backref('payments', lazy='dynamic'))
-    description = Column(String(1024))
+    description = Column(String(1024), nullable=False)
     account = Column(Integer)
     amount = Column(Float())
     tag = Column(String(128))
     date = Column(Date)
 
-class Plan(db.Model):
-    __tablename__ = 'plan'
+class Recurring(db.Model):
+    __tablename__ = 'recurring'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    description = Column(String(1024), nullable=False)
+    account_from = Column(Integer())
+    account_to = Column(Integer())
+    tag = Column(String(128))
+    rrule = Column(String(1024),nullable=False)
+    matcher = Column(String(1024))
+
+class Budget(db.Model):
+    __tablename__ = 'budget'
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(64))
     description = Column(String(1024))
     amount = Column(Float())
     frequency = Column(String(32))
-    type = Column(String(32))
     tag = Column(String(128))
     account_from = Column(Integer())
     account_to = Column(Integer())
-    regex = Column(String(1024))
+    start_date = Column(String(32))
+    end_date = Column(String(32))
+    amount_moved = Column(Float())
 
 class Account(db.Model):
     __tablename__ = 'account'
@@ -103,6 +114,7 @@ def receive_before_insert(mapper, connection, target):
     ref = f"{target.date} {target.account} {target.description}".encode('utf-8')
     target.ref = hashlib.md5(ref).hexdigest()
 
+
 # Create the database tables.
 db.create_all()
 
@@ -114,8 +126,9 @@ jwt_required=dict(GET_SINGLE=[auth_func], GET_MANY=[auth_func])
 # Create API endpoints, which will be available at /api/<tablename> by
 # default. Allowed HTTP methods can be specified as well.
 manager.create_api(Transfer, methods=['GET', 'POST'])
-manager.create_api(Payment, methods=['GET', 'POST', 'PUT', 'DELETE'])
-manager.create_api(Plan, methods=['GET', 'POST', 'PUT', 'DELETE'])
+manager.create_api(Due, methods=['GET'])
+manager.create_api(Recurring, methods=['GET', 'POST', 'PUT', 'DELETE'])
+manager.create_api(Budget, methods=['GET', 'POST', 'PUT', 'DELETE'])
 manager.create_api(Account, methods=['GET', 'POST'])
 
 # manager.create_api(Computer, methods=['GET'])

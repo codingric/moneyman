@@ -20,4 +20,4 @@ EXPOSE 5000
 RUN rm -rf /.wh /root/.cache /var/cache /tmp/requirements.txt
 
 WORKDIR ${APP_DIR}
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "rest-api:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-5000}", "rest-api:app"]

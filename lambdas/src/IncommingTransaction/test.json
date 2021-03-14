@@ -1,0 +1,49 @@
+{
+    "headers": {
+        "return_path": "customer.alerts@ing.com.au",
+        "received": [
+            "from [ 100.112.5.40 ] (using TLSv1.2 with cipher DHE-RSA-AES256-GCM-SHA384 (256 bits))\tby server-3.bemta.az-c.us-east-1.aws.symcld.net id 42/E4-45036-109B7206; Sat, 13 Feb 2021 11: 33: 21 +0000",
+            "(qmail 25735 invoked from network); Sat, 13 Feb 2021 11: 33: 19 +0000",
+            "from unknown (HELO smtp.ingdirect.com.au) (156.114.17.120)  by server-3.tower-411.messagelabs.com with ECDHE-RSA-AES256-GCM-SHA384 encrypted SMTP; Sat, 13 Feb 2021 11: 33: 19 +0000",
+            "from P6BATCH01-A02F (10.54.33.11) by prodsmtpgw.ingdirect.com.au (10.54.204.66) with Microsoft SMTP Server id 15.1.1979.3; Sat, 13 Feb 2021 22: 33: 07 +1100"
+        ],
+        "date": "Sat, 13 Feb 2021 22:33:07 +1100",
+        "from": "customer.alerts@ing.com.au",
+        "to": "\"c77bce21e0a9d86c7077@cloudmailin.net\" <c77bce21e0a9d86c7077@cloudmailin.net>",
+        "message_id": "<e9b35b56-8ccd-4ddd-b2f2-41dbe695f7aa@psy6exedge02.dmzau.ingdirect.intranet>",
+        "subject": "An account notification for you, Ricardo",
+        "mime_version": "1.0",
+        "content_type": "text/html; charset=us-ascii",
+        "content_transfer_encoding": "quoted-printable",
+        "dkim_signature": "v=1; a=rsa-sha256; c=relaxed/relaxed; d=ing.com.au;\ts=INGA20180531; t=1613216001; i=@ing.com.au;\tbh=KrykRCQ5BwKaCN/dT9UA1O8FwYfw/EZXSrhvrZrl2S0=;\th=MIME-Version:From:To:Date:Subject:Content-Type:\t Content-Transfer-Encoding:Message-ID;\tb=WSbZVCLHuCwLSrbYdcoxIftYYJlorE1EpbK+IBZv4BBihVvZ1S3n/4S0ls4gJH/tG\t N0WfrpX5fx90D/rv+ZDdPRwtZLHi7yPo9N6CYNIOn025QJnTfQquC3Bh8Kd7Jr4i3y\t HH2Gra5SWYqUG6TSLyv2iuaxYxURzBK04sQewFeZRMZSafHs9O0K5cxKnDqJiscBpa\t nLLS0fuU2odgK6zIS7Kbm0r331rjyV5Xc23GTbT8aPVZD0CwqLT7cp1liuaNjEGzFw\t qJQqHJZp4aSD1/TyHCh4/VnKDvISOX5D1KSG6VMAJvK+aUvqCpVSuxAtYAzunCBzhz\t jEbIZdoUYdwxA==",
+        "x_brightmail_tracker": "H4sIAAAAAAAAA+NgFlrNIsWRWlGSWpSXmKPExsUyp0iwQpdhp3q  CQd95HovtJwwdGD3+zX/CHsAYxZqZl5RfkcCaMfOYUUHfdcaK0x0ODYyvg7sYuTiEBJYxSjxf  0cXcxcjJwSsgKHFy5hMWEJtNQEniz4TlrCC2iECQxKWpcxm7GDk4WARUJWa9kAMJCwsYSpx6s  wCsnFlAW+LMgcdMMPayha+hRkZK3Lrwlh3EFhJQl5j25iczxN4WRomJ78+xTGDknoVk9Swks2  YhmbWAkXkVo1lSUWZ6RkluYmaOrqGBga6hoZGuia6hpaFeYpVusl5psW5qYnGJLpBbXqxXXJm  bnJOil5dasokRGD4pBSz7dzBeef1B7xCjJAeTkiivJJ96ghBfUn5KZUZicUZ8UWlOavEhRhkO  DiUJ3uIdQDnBotT01Iq0zBxgKMOkJTh4lER4XbcBpXmLCxJzizPTIVKnGF05Pq5asoiZ4zuY/  AEmX78FkbuenFrMLMSSl5+XKiXOqwEyWwCkOaM0D240LA4vMcpKCfMyMjAwCPEUpBblZpagyr  9iFOdgVBLmNQSZwpOZVwJ3wSug45iAjqvpUgM5riQRISXVwNRk82olVzjn7ECu4zLhAmLvc+q  fLl53KE521zEWxzDf7bM2vur3O9IsHMH3e9eyJb0xHlEfJfu27rzayDx7rd/aKVN/5v6od+O/  L7L90SvNr3XWgXtWln4Qr6j/Kr35zKw4xc1l3ob1x9NfSScm2RZPyVgcYeOiErlKr6hckPGr+  827PnWB6j4Guzyrcz7pT5psk8py+5iJ9p1IVc0Jyc+N3+8XmfycyePa7jXySh6tPK7Ws/Pn3v  nLvYX12r3NGw/IZj5e0FltwzjLlG97yIlMAaei2TfinjFt6l0vHbO2hm+tXI2O6p1HYbUi+j/  XTtNb0bRruuRMo5ap69592Mq3KpRvud2mLzZVKluEvZRYijMSDbWYi4oTAdXMLD0+AwAA",
+        "x_env_sender": "customer.alerts@ing.com.au",
+        "x_msg_ref": "server-3.tower-411.messagelabs.com!1613215989!412595!11",
+        "x_originating_ip": "[156.114.17.120]",
+        "x_symc_ess_client_auth": "outbound-route-from=pass",
+        "x_starscan_received": "",
+        "x_starscan_version": "9.60.3; banners=-,-,-",
+        "x_viruschecked": "Checked",
+        "received_spf": "PermError (psy6exedge02.dmzau.ingdirect.intranet: domain of customer.alerts@ing.com.au used an invalid SPF mechanism)"
+    },
+    "envelope": {
+        "to": "c77bce21e0a9d86c7077@cloudmailin.net",
+        "recipients": [
+            "c77bce21e0a9d86c7077@cloudmailin.net"
+        ],
+        "from": "customer.alerts@ing.com.au",
+        "helo_domain": "mail1.bemta23.messagelabs.com",
+        "remote_ip": "67.219.246.114",
+        "tls": true,
+        "tls_cipher": "TLSv1.2",
+        "md5": "9aef3b39853b160056505d2f41c406f0",
+        "spf": {
+            "result": "null",
+            "domain": "ing.com.au"
+        }
+    },
+    "plain": null,
+    "html": "<html>",
+    "reply_plain": null,
+    "attachments": []
+}

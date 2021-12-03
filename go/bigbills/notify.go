@@ -30,6 +30,10 @@ func Notify(message string, config map[interface{}]interface{}) (response string
 
 		res, err2 := client.Do(req)
 
+		if *verbose {
+			log.Printf("Sent message to %s", mobile.(string))
+		}
+
 		if err2 != nil {
 			err = err2
 			return

@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bigbills
+spec:
+  schedule: "52 13 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: bigbills
+              image: codingric/bigbills
+              imagePullPolicy: Always
+          restartPolicy: Never

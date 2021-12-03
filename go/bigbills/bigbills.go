@@ -28,10 +28,10 @@ type LateBigBill struct {
 	Days   string `json:"days"`
 }
 
-func (b *BigBills) Hydrate() {
+func (b *BigBills) Hydrate(path string) {
 	ctx := context.Background()
 
-	srv, err := sheets.NewService(ctx, option.WithCredentialsFile("credentials.json"), option.WithScopes(sheets.SpreadsheetsScope))
+	srv, err := sheets.NewService(ctx, option.WithCredentialsFile(path), option.WithScopes(sheets.SpreadsheetsScope))
 
 	if err != nil {
 		log.Fatalf("Unable to retrieve Sheets client: %v", err)
@@ -47,7 +47,9 @@ func (b *BigBills) Hydrate() {
 	}
 
 	if len(resp.Values) == 0 {
-		log.Fatal("No data found.")
+		if *verbose {
+			log.Printf("No data loaded from spreadsheet", len(resp.Values))
+		}
 	} else {
 		for _, row := range resp.Values {
 			// Print columns A and E, which correspond to indices 0 and 4.
@@ -56,6 +58,9 @@ func (b *BigBills) Hydrate() {
 			} else {
 				b.Dates = append(b.Dates, BigBillDate{strings.Trim(row[0].(string), " "), row[1].(string), ""})
 			}
+		}
+		if *verbose {
+			log.Printf("%d rows loaded from spreadsheet", len(resp.Values))
 		}
 	}
 }

@@ -13,8 +13,8 @@ type Config struct {
 	//mobiles []string `yaml:"mobiles"`
 }
 
-func LoadConfig() map[interface{}]interface{} {
-	data, err := ioutil.ReadFile("config.yaml")
+func LoadConfig(path string) map[interface{}]interface{} {
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Fatal(err)
 	}

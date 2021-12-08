@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/codingric/moneyman/go/backend/controllers"
 	"github.com/codingric/moneyman/go/backend/models"
 
@@ -9,11 +11,18 @@ import (
 )
 
 var (
-	database_path = kingpin.Flag("database", "Backend database").Default("backend.db").Short('d').ExistingFile()
+	database_path = kingpin.Flag("database", "Backend database").Default("backend.db").Short('d').String()
+	verbose       = kingpin.Flag("verbose", "Verbosity").Short('v').Bool()
 )
 
 func main() {
+	kingpin.Parse()
+	// gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+
+	if *verbose {
+		log.Printf("Database: %s", *database_path)
+	}
 
 	// Connect to database
 	models.ConnectDatabase(*database_path)

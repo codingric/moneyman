@@ -1,8 +1,10 @@
 package controllers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/codingric/moneyman/go/backend/models"
@@ -13,13 +15,40 @@ type CreateTransactionInput struct {
 	Created     time.Time `json:"created" binding:"required"`
 	Amount      string    `json:"amount" binding:"required"`
 	Description string    `json:"description" binding:"required"`
+	Account     string    `json:"account" binding:"required"`
 }
 
 // GET /transactions
 // Find all transactions
 func FindTransactions(c *gin.Context) {
+	filters := c.Request.URL.Query()
+	query := models.DB
+	for filter, value := range filters {
+		p := strings.Split(filter, "__")
+		op := "eq"
+		field := filter
+		if len(p) > 1 {
+			field = p[0]
+			op = p[1]
+		}
+		log.Printf("Filter: %v %v %v", field, op, value[0])
+		switch op {
+		case "like":
+			query = query.Where(field+" LIKE ?", "%"+value[0]+"%")
+		case "gt":
+			query = query.Where(field+" > ?", value[0])
+		case "ge":
+			query = query.Where(field+" >= ?", value[0])
+		case "lt":
+			query = query.Where(field+" < ?", value[0])
+		case "le":
+			query = query.Where(field+" <= ?", value[0])
+		default:
+			query = query.Where(field+" = ?", value[0])
+		}
+	}
 	var transactions []models.Transaction
-	models.DB.Find(&transactions)
+	query.Find(&transactions)
 
 	c.JSON(http.StatusOK, gin.H{"data": transactions})
 }
@@ -49,7 +78,9 @@ func CreateTransaction(c *gin.Context) {
 
 	// Create transaction
 	f, _ := strconv.ParseFloat(input.Amount, 64)
-	transaction := models.Transaction{CreatedAt: input.Created, Amount: int64(f * 100), Description: input.Description}
+	a, _ := strconv.ParseInt(input.Account, 10, 64)
+	//t, _ := time.Parse("2006-01-02", input.Created)
+	transaction := models.Transaction{Created: input.Created, Amount: f, Description: input.Description, Account: a}
 	models.DB.Create(&transaction)
 
 	c.JSON(http.StatusOK, gin.H{"data": transaction})

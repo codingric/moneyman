@@ -2,6 +2,7 @@ import urllib3
 import json
 import hashlib
 import re
+import logging
 
 from skimage.io import imread, imsave
 from skimage.metrics import structural_similarity as ssim
@@ -10,6 +11,7 @@ from skimage.transform import resize
 import base64
 import operator
 import os
+import sys
 
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
@@ -18,14 +20,19 @@ from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP, PKCS1_v1_5
 import time
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 class CookieJar:
     def __init__(self):
+        self.logger = logging.getLogger("cookies")
+        self.logger.setLevel(os.environ.get("COOKIE_LOG_LEVEL", "CRITICAL"))
         self._cookies = {}
 
     def __str__(self):
         s = "; ".join([f"{k}={v}" for k, v in self._cookies.items()])
-        print(f"Cookies: {s}")
+        self.logger.debug(f"Cookies: {s}")
         return s
 
     def update(self, response: urllib3.response):
@@ -35,12 +42,12 @@ class CookieJar:
             if k.lower() in ["path", "domain"]:
                 continue
             if k not in self._cookies:
-                print("cookie.new ", end="")
+                self.logger.debug("cookie.new ", end="")
             elif self._cookies[k] != v:
-                print("cookie.update ", end="")
+                self.logger.debug("cookie.update ", end="")
             else:
                 continue
-            print(f"{k}={v}")
+            self.logger.debug(f"{k}={v}")
             self._cookies[k] = v
 
     def add(self, name, value):
@@ -112,17 +119,18 @@ def issue(headers, jar):
 
     r = http.request("POST", u, headers=headers, body="{}".encode("utf-8"))
     jar.update(r)
+    logger.info("Issue: %s, %s", json.loads(r.data), r.headers)
     return json.loads(r.data), r.headers
 
 
 def post(token, body, url, jar):
     http = urllib3.PoolManager()
-    sig, _ = message_sig(rsa, f"X-AuthToken:{token}{{}}")
+    sig, _ = message_sig(rsa, f"X-AuthToken:{token}{body}")
     headers = {
-        "x-authtoken": token,
-        "x-messagesignature": sig,
-        "content-type": "application/json",
-        "accept": "application/json",
+        "X-AuthToken": token,
+        "X-MessageSignature": sig,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.152 Safari/537.36",
         "Sec-GPC": "1",
         "Origin": "https://www.ing.com.au",
@@ -139,6 +147,8 @@ def post(token, body, url, jar):
         "sec-ch-ua-mobile": "?0",
     }
     r = http.request("POST", url, headers=headers, body=body.encode("utf-8"))
+    h = " ".join([f'-H "{k}: {v}"' for k, v in headers.items()])
+    # print(f'curl -XPOST {h} --data="{body}" {url}')
     jar.update(r)
     try:
         return json.loads(r.data)
@@ -150,6 +160,7 @@ def get_request(url, jar):
     h = urllib3.PoolManager()
     r = h.request("GET", url, headers={"Cookie": str(jar)})
     jar.update(r)
+    # logger.info(f"GET {url} = {r.status}")
 
 
 pre_urls = [
@@ -233,6 +244,18 @@ def main():
         cookies,
     )
 
+    logger.info("Sleeping 10sec...")
+    time.sleep(10)
+    logger.info("Renew")
+    payload = post(
+        login["Token"],
+        '{"nonUserAction":"true"}',
+        "https://www.ing.com.au/STSServiceB2C/V1/SecurityTokenServiceProxy.svc/renew",
+        cookies,
+    )
+    logger.info("renew.reponse: %s", payload)
+
 
 if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stdout)
     main()

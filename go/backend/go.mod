@@ -33,3 +33,8 @@ require (
 	gorm.io/driver/sqlite v1.2.6 // indirect
 	gorm.io/gorm v1.22.4 // indirect
 )
+
+replace (
+	github.com/codingric/moneyman/go/backend/models => ./models
+	github.com/codingric/moneyman/go/backend/controllers => ./controllers
+)

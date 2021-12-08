@@ -1,10 +1,11 @@
-module github.com/codingric/moneyman/go/backend
+module github.com/codingric/moneyman/backend
 
 go 1.17
 
 require (
+	github.com/codingric/moneyman/backend/controllers v0.0.0-00010101000000-000000000000
+	github.com/codingric/moneyman/backend/models v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.7.4
-	github.com/jinzhu/gorm v1.9.16
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
 
@@ -35,6 +36,6 @@ require (
 )
 
 replace (
-	github.com/codingric/moneyman/go/backend/models => ./models
-	github.com/codingric/moneyman/go/backend/controllers => ./controllers
+	github.com/codingric/moneyman/backend/controllers => ./controllers
+	github.com/codingric/moneyman/backend/models => ./models
 )

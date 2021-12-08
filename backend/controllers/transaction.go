@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codingric/moneyman/go/backend/models"
+	"github.com/codingric/moneyman/backend/models"
 	"github.com/gin-gonic/gin"
 )
 

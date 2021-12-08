@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/codingric/moneyman/go/backend/controllers"
-	"github.com/codingric/moneyman/go/backend/models"
+	"github.com/codingric/moneyman/backend/controllers"
+	"github.com/codingric/moneyman/backend/models"
 
 	"github.com/gin-gonic/gin"
 	"gopkg.in/alecthomas/kingpin.v2"

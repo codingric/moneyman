@@ -4,7 +4,7 @@ on: [push]
 
 defaults:
   run:
-    working-directory: src
+    working-directory: backend
 
 jobs:
   build:
@@ -13,8 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Dockerfile scans
-        run: docker-compose run checkov
+      # - name: Dockerfile scans
+      #   run: docker-compose run checkov
 
       # - name: Run unit tests
       #   run: docker-compose run tests
@@ -27,9 +27,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Build docker image
-        run: |
-          docker buildx create --use \
-          && docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t ghcr.io/codingric/moneyman-backend --push
+        run: make package
 
-      - name: Static scans
-        run: docker-compose run trivy
+      # - name: Static scans
+      #   run: docker-compose run trivy

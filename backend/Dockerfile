@@ -17,7 +17,7 @@ FROM alpine:3.14
 LABEL org.opencontainers.image.source https://gitlab.com/codingric/moneyman/backend
 
 ENTRYPOINT [ "/backend" ]
-CMD ["check"]
+CMD ["-v"]
 
 COPY --from=build /backend/backend .
 

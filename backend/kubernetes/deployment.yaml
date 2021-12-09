@@ -55,7 +55,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: moneyman-backend
-          image: "codingric/moneyman-backend"
+          image: "ghcr.io/codingric/moneyman-backend"
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

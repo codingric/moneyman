@@ -35,7 +35,3 @@ require (
 	gorm.io/gorm v1.22.4 // indirect
 )
 
-replace (
-	github.com/codingric/moneyman/backend/controllers => ./controllers
-	github.com/codingric/moneyman/backend/models => ./models
-)

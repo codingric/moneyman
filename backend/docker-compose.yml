@@ -3,7 +3,7 @@ services:
   trivy:
     image: ghcr.io/aquasecurity/trivy:latest
     command: |
-      -q image --exit-code 1 -s HIGH ghcr.io/codingric/moneyman-backend:latest
+      -q image --exit-code 1 -s HIGH ghcr.io/codingric/moneyman/backend:latest
 
   checkov:
     image: bridgecrew/checkov:latest

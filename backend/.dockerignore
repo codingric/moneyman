@@ -1,0 +1,10 @@
+backend
+*.db
+*.py
+*.json
+Makefile
+*.md
+.gitignore
+kubernetes
+Dockerfile
+.dockerignore

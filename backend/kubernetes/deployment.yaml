@@ -1,0 +1,79 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: moneyman-backend
+  labels:
+    app: moneyman-backend
+spec:
+  type: NodePort
+  ports:
+    - name: moneyman-backend
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: moneyman-backend
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: moneyman-backend
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: moneyman.k3s.salinas.id.au
+      http:
+        paths:
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: moneyman-backend
+                port:
+                  number: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moneyman-backend
+  labels:
+    app: moneyman-backend
+spec:
+  selector:
+    matchLabels:
+      app: moneyman-backend
+  template:
+    metadata:
+      labels:
+        app: moneyman-backend
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: moneyman-backend
+          image: "codingric/moneyman-backend"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: database
+              mountPath: /database
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+      volumes:
+        - name: database
+          hostPath:
+            path: /data/moneyman
+            type: Directory
+      nodeSelector:
+        moneyman-data: "true"

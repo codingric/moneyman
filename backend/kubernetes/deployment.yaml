@@ -21,18 +21,23 @@ metadata:
   name: moneyman-backend
   annotations:
     kubernetes.io/ingress.class: nginx
+    nginx.org/upstream-zone-size: "512k"
 spec:
   rules:
     - host: moneyman.k3s.salinas.id.au
       http:
         paths:
-          - path: /api/
-            pathType: Prefix
+          - path: /
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: moneyman-backend
                 port:
                   number: 8080
+  # tls:
+  #   - hosts:
+  #       - moneyman.k3s.salinas.id.au
+  #     secretName: moneyman-backend-tls
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -55,8 +60,12 @@ spec:
         fsGroup: 1000
       containers:
         - name: moneyman-backend
-          image: "ghcr.io/codingric/moneyman-backend"
+          image: "ghcr.io/codingric/moneyman/backend"
           imagePullPolicy: Always
+          args:
+            - "-d"
+            - "/database/backend.db"
+            - "-v"
           ports:
             - containerPort: 8080
               protocol: TCP

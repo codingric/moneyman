@@ -37,6 +37,7 @@ func main() {
 	r.GET("/transactions", controllers.FindTransactions)
 	r.GET("/transactions/:id", controllers.FindTransaction)
 	r.POST("/transactions", controllers.CreateTransaction)
+	r.POST("/upload", controllers.Upload)
 
 	// Run the server
 	r.Run()

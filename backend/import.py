@@ -25,7 +25,7 @@ def main():
                 "created": item["When"]["S"][0:19] + "+00:00",
             }
 
-            rep = requests.post("http://localhost:8080/transactions", json=payload)
+            rep = requests.post("http://moneyman.k3s.salinas.id.au/transactions", json=payload)
             if rep.status_code != 200:
                 print(f"Payload: {payload}")
                 print(rep.text)

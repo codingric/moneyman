@@ -1,16 +1,14 @@
 package controllers
 
 import (
+	"crypto/md5"
+	"encoding/csv"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-	"crypto/md5"
-	"fmt"
-	"encoding/csv"
-	"path/filepath"
-	"os"
 
 	"github.com/codingric/moneyman/backend/models"
 	"github.com/gin-gonic/gin"
@@ -95,7 +93,7 @@ func CreateTransaction(c *gin.Context) {
 	result := models.DB.Create(&transaction)
 
 	if result.Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error":result.Error})
+		c.JSON(http.StatusBadRequest, gin.H{"error": result.Error})
 		return
 	}
 
@@ -103,46 +101,38 @@ func CreateTransaction(c *gin.Context) {
 }
 
 func Upload(c *gin.Context) {
-	file, err := c.FormFile("csv")
+	file, _, err := c.Request.FormFile("csv")
 	if err != nil {
 		c.String(http.StatusBadRequest, "get form err: %s", err.Error())
 		return
 	}
 
-	filename := filepath.Base(file.Filename)
-	if err := c.SaveUploadedFile(file, filename); err != nil {
-		c.String(http.StatusBadRequest, fmt.Sprintf("upload file err: %s", err.Error()))
-		return
-	}
-
-	fp, _ := os.Open(filename)
-
-	reader := csv.NewReader(fp)
+	reader := csv.NewReader(file)
 	records, _ := reader.ReadAll()
 
 	hashes := []string{}
 
 	imported := 0
 	skipped := []gin.H{}
-	
+
 	for index, row := range records {
-		
+
 		if row[0] == "Date" {
 			continue
 		}
-		
+
 		created, _ := time.Parse("02/01/2006", row[0])
 
 		amount := row[3]
 		if row[3] == "" {
 			amount = row[4]
 		}
-	
+
 		b := []string{created.Format("2006-01-02"), row[1], amount, row[2]}
 		d := strings.Join(b, "!")
 		log.Print(d)
 		h := md5.Sum([]byte(d))
-	
+
 		hashes = append(hashes, fmt.Sprintf("%x", h))
 		// Create transaction
 		f, _ := strconv.ParseFloat(amount, 64)
@@ -151,7 +141,7 @@ func Upload(c *gin.Context) {
 		result := models.DB.Debug().Create(&transaction)
 
 		if result.Error != nil {
-			skipped = append(skipped, gin.H{"index":index, "error": fmt.Sprint(result.Error)})
+			skipped = append(skipped, gin.H{"index": index, "error": fmt.Sprint(result.Error)})
 			continue
 		}
 		imported += 1

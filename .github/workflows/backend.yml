@@ -1,6 +1,9 @@
 name: Build docker image
 
-on: [push]
+on:
+  push:
+    paths:
+      - "backend/**"
 
 defaults:
   run:
@@ -13,12 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      # - name: Dockerfile scans
-      #   run: docker-compose run checkov
-
-      # - name: Run unit tests
-      #   run: docker-compose run tests
-
       - name: Login to GHCR
         uses: docker/login-action@v1
         with:
@@ -28,6 +25,3 @@ jobs:
 
       - name: Build docker image
         run: make package
-
-      # - name: Static scans
-      #   run: docker-compose run trivy

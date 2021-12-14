@@ -1,6 +1,7 @@
 backend
 *.db
 *.py
+*.csv
 *.json
 Makefile
 *.md

@@ -1,4 +1,4 @@
-name: Build docker image
+name: Build mailoarser
 
 on:
   push:
@@ -10,7 +10,7 @@ defaults:
     working-directory: mailparser
 
 jobs:
-  build_mailparser:
+  build:
     runs-on: ubuntu-latest
 
     steps:

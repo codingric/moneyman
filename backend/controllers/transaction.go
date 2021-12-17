@@ -76,6 +76,7 @@ func CreateTransaction(c *gin.Context) {
 	var input CreateTransactionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Printf("CreateTransaction.error: %s", err.Error())
 		return
 	}
 

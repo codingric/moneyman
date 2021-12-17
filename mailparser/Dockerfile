@@ -16,7 +16,7 @@ RUN go get \
 FROM alpine:3.14
 LABEL org.opencontainers.image.source https://github.com/codingric/moneyman
 
-ENTRYPOINT [ "/app/mailparser" ]
+ENTRYPOINT [ "/mailparser" ]
 CMD ["-v"]
 
 COPY --from=build /app/mailparser .

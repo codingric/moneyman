@@ -1,0 +1,63 @@
+version: 2.1
+
+parameters:
+  build_mailparser:
+    type: boolean
+    default: false
+
+orbs:
+  path-filtering: circleci/path-filtering@0.1.0
+
+setup: << pipeline.parameters.build_mailparser == false >>
+
+jobs:
+  build-mailparser:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - setup_remote_docker
+      - restore_cache:
+          keys:
+            - v1-{{ .Branch }}
+          paths:
+            - /caches/mailparser.tar
+      - run:
+          name: Load Docker image layer cache
+          command: |
+            set +o pipefail
+            docker load -i /caches/mailparser.tar | true
+      - run:
+          name: Login into ghcr.io
+          command: |
+            docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+      - run:
+          name: Build application Docker image
+          working_directory: mailparser
+          command: |
+            export DOCKER_CLI_EXPERIMENTAL=enabled
+            make package
+
+# Invoke jobs via workflows
+# See: https://circleci.com/docs/2.0/configuration-reference/#workflows
+workflows:
+  circleci-build:
+    unless: "<< pipeline.parameters.build_mailparser >>"
+    jobs:
+      - path-filtering/filter:
+          name: check-updated-files
+          # 3-column, whitespace-delimited mapping. One mapping per
+          # line:
+          # <regex path-to-test> <parameter-to-set> <value-of-pipeline-parameter>
+          mapping: |
+            mailparser/.* build_mailparser true
+          base-revision: << pipeline.git.branch >>
+          # this is the path of the configuration we should trigger once
+          # path filtering and pipeline parameter value updates are
+          # complete. In this case, we are using the parent dynamic
+          # configuration itself.
+          config-path: .circleci/config.yml
+  build-mailparser:
+    when: "<< pipeline.parameters.build_mailparser >>"
+    jobs:
+      - build-mailparser

@@ -1,9 +1,7 @@
-name: Build backend
+name: Build docker image
 
 on:
   push:
-    branches:
-      - master
     paths:
       - "backend/**"
 

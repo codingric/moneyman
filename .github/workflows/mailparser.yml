@@ -1,7 +1,9 @@
-name: Build mailoarser
+name: Build mailparser
 
 on:
   push:
+    branches:
+      - master
     paths:
       - "mailparser/**"
 

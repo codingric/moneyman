@@ -1,17 +1,27 @@
 version: 2.1
 
 parameters:
-  build_mailparser:
+  mailparser:
     type: boolean
     default: false
+  backend:
+    type: boolean
+    default: false
+  setup:
+    type: boolean
+    default: true
 
 orbs:
   path-filtering: circleci/path-filtering@0.1.0
 
-setup: << pipeline.parameters.build_mailparser == false >>
+setup: << pipeline.parameters.setup >>
 
 jobs:
-  build-mailparser:
+  build-docker:
+    parameters:
+      pipe_name:
+        type: string
+        default: ""
     docker:
       - image: cimg/base:stable
     steps:
@@ -21,19 +31,19 @@ jobs:
           keys:
             - v1-{{ .Branch }}
           paths:
-            - /caches/mailparser.tar
+            - /caches/<< parameters.pipe_name >>.tar
       - run:
           name: Load Docker image layer cache
           command: |
             set +o pipefail
-            docker load -i /caches/mailparser.tar | true
+            docker load -i /caches/<< parameters.pipe_name >>.tar | true
       - run:
           name: Login into ghcr.io
           command: |
             docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
       - run:
           name: Build application Docker image
-          working_directory: mailparser
+          working_directory: << parameters.pipe_name >>
           command: |
             export DOCKER_CLI_EXPERIMENTAL=enabled
             make package
@@ -42,7 +52,7 @@ jobs:
 # See: https://circleci.com/docs/2.0/configuration-reference/#workflows
 workflows:
   circleci-build:
-    unless: "<< pipeline.parameters.build_mailparser >>"
+    when: << pipeline.parameters.setup >>
     jobs:
       - path-filtering/filter:
           name: check-updated-files
@@ -50,7 +60,9 @@ workflows:
           # line:
           # <regex path-to-test> <parameter-to-set> <value-of-pipeline-parameter>
           mapping: |
-            mailparser/.* build_mailparser true
+            mailparser/.* mailparser true
+            backend/.* backend true
+            .* setup false
           base-revision: << pipeline.git.branch >>
           # this is the path of the configuration we should trigger once
           # path filtering and pipeline parameter value updates are
@@ -58,6 +70,12 @@ workflows:
           # configuration itself.
           config-path: .circleci/config.yml
   build-mailparser:
-    when: "<< pipeline.parameters.build_mailparser >>"
+    when: "<< pipeline.parameters.mailparser >>"
     jobs:
-      - build-mailparser
+      - build-docker:
+          pipe_name: mailparser
+  build-backend:
+    when: "<< pipeline.parameters.backend >>"
+    jobs:
+      - build-docker:
+          pipe_name: backend

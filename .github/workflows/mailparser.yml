@@ -3,14 +3,14 @@ name: Build docker image
 on:
   push:
     paths:
-      - "backend/**"
+      - "mailparser/**"
 
 defaults:
   run:
-    working-directory: backend
+    working-directory: mailparser
 
 jobs:
-  build_backend:
+  build_mailparser:
     runs-on: ubuntu-latest
 
     steps:

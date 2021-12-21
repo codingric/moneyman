@@ -9,7 +9,7 @@ WORKDIR /app
 RUN apk add gcc libc-dev git
 
 COPY go.sum go.mod .
-RUN go get
+RUN go mod download
 
 COPY . .
 RUN go build -o mailparser

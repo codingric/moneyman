@@ -1,4 +1,3 @@
-
 build:
 	go build
 
@@ -7,7 +6,7 @@ package:
 		--cache-from=type=local,src=/tmp/cache \
 		--cache-to=type=local,dest=/tmp/cache \
 		--platform linux/arm64 \
-		-t ghcr.io/codingric/moneyman/mailparser:latest \
+		-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):latest \
 		--progress plain \
-		--push
+		--push \
 		.

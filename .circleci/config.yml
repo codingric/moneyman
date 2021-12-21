@@ -33,7 +33,7 @@ jobs:
       - run: mkdir /tmp/cache
       - restore_cache:
           keys:
-            - << parameters.pipe_name >>
+            - << parameters.pipe_name >>-v1
           paths:
             - /tmp/cache
       - run:
@@ -45,9 +45,10 @@ jobs:
           working_directory: << parameters.pipe_name >>
           command: |
             export DOCKER_CLI_EXPERIMENTAL=enabled
-            make package
+            export IMAGE_NAME=<< parameters.pipe_name >>
+            make -f ../Makefile package
       - save_cache:
-          key: << parameters.pipe_name >>
+          key: << parameters.pipe_name >>-v1
           paths:
             - /tmp/cache
 

@@ -8,10 +8,11 @@ WORKDIR /app
 
 RUN apk add gcc libc-dev git
 
-COPY . .
+COPY go.sum go.mod .
+RUN go get
 
-RUN go get \
-    && go build -o mailparser
+COPY . .
+RUN go build -o mailparser
 
 FROM alpine:3.14
 LABEL org.opencontainers.image.source https://github.com/codingric/moneyman

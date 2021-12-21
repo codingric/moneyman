@@ -50,6 +50,15 @@ jobs:
           command: |
             export DOCKER_CLI_EXPERIMENTAL=enabled
             make package
+      - run:
+          name: Export Docker image layer cache
+          command: |
+            set +o pipefail
+            docker save -o /caches/<< parameters.pipe_name >>.tar ghcr.io/codingric/moneyman/<< parameters.pipe_name >> | true
+      - save_cache:
+          key: << parameters.pipe_name >>
+          paths:
+            - /caches/<< parameters.pipe_name >>.tar
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/2.0/configuration-reference/#workflows

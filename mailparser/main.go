@@ -28,6 +28,8 @@ type ConfigType struct {
 	Patterns []string `yaml:"patterns"`
 }
 
+type Dict map[string]string
+
 type Json map[string]interface{}
 
 func main() {
@@ -55,32 +57,31 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("Received request")
 
-	data, err := parseMessage(r)
+	body, _ := ioutil.ReadAll(r.Body)
+
+	data, err := parseMessage(body)
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(fmt.Sprintf("Invalid payload - %v", err)))
 		if *verbose {
 			log.Printf("Reponded with HTTP/400 - Invalid payload - %s\n", err)
-			rb, _ := io.ReadAll(r.Body)
-			log.Printf("Payload:\n%s\n", string(rb))
+			//log.Printf("Payload:\n%s\n", string(body))
 		}
 		return
 	}
+	data["account"] = r.RequestURI[1:]
 
 	if *verbose {
 		log.Printf("Parsed - %v\n", data)
 	}
-
-	if *verbose {
-		log.Println("Reponded with HTTP/200 - OK")
-	}
-	w.Write([]byte("OK"))
 
 	jb, _ := json.Marshal(data)
 	resp, post_err := http.Post(config.Webhook, "application/json", bytes.NewReader(jb))
 
 	if post_err != nil {
 		log.Printf("Failed to POST to %s (%s)", config.Webhook, post_err)
+		w.WriteHeader(503)
+		w.Write([]byte("Error"))
 		return
 	}
 
@@ -88,19 +89,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		rb, _ := io.ReadAll(resp.Body)
 		log.Printf("POST response: %s", string(rb))
 	}
-}
 
-func parseJson(in io.Reader) Json {
-	decoder := json.NewDecoder(in)
-	decoder.UseNumber()
-	j := make(map[string]interface{})
-	for {
-		err := decoder.Decode(&j)
-		if err != nil {
-			break
-		}
+	if *verbose {
+		log.Println("Reponded with HTTP/200 - OK")
 	}
-	return j
+	w.Write([]byte("OK"))
 }
 
 const remove = `<.*?>|\n+`
@@ -114,32 +107,40 @@ func stripHtml(str string) string {
 	return s.ReplaceAllString(str, " ")
 }
 
-func parseMessage(r *http.Request) (map[string]string, error) {
+func parseMessage(body []byte) (data Dict, err error) {
 
-	j := parseJson(r.Body)
+	if data == nil {
+		data = make(Dict)
+	}
+	decoder := json.NewDecoder(bytes.NewBuffer(body))
+	decoder.UseNumber()
 
-	if _, ok := j["html"]; !ok {
-		return make(map[string]string), errors.New("missing html")
+	json_ := make(map[string]interface{})
+	err = decoder.Decode(&json_)
+	if err != nil {
+		return
 	}
 
-	d := make(map[string]string)
-
-	html := j["html"].(string)
-	msg := stripHtml(html)
-
-	d["account"] = r.RequestURI[1:]
-	if _, ok := j["headers"]; !ok {
-		return make(map[string]string), errors.New("missing headers")
+	if _, ok := json_["html"]; !ok {
+		err = errors.New("missing html")
+		return
 	}
 
-	dt, _ := time.Parse(time.RFC1123Z, j["headers"].(map[string]interface{})["date"].(string))
-	d["created"] = dt.Format("2006-01-02T15:04:05Z07:00")
+	wording := stripHtml(json_["html"].(string))
+
+	if _, ok := json_["headers"]; !ok {
+		err = errors.New("missing headers")
+		return
+	}
+
+	dt, _ := time.Parse(time.RFC1123Z, json_["headers"].(map[string]interface{})["date"].(string))
+	data["created"] = dt.Format("2006-01-02T15:04:05Z07:00")
 
 	for _, p := range config.Patterns {
 		r := regexp.MustCompile(p)
 		n := r.SubexpNames()
 		s := ""
-		for i, m := range r.FindStringSubmatch(msg) {
+		for i, m := range r.FindStringSubmatch(wording) {
 			switch n[i] {
 			case "":
 				continue
@@ -147,16 +148,20 @@ func parseMessage(r *http.Request) (map[string]string, error) {
 				s = "-"
 				continue
 			case "amount":
-				d[n[i]] = s + m
+				data[n[i]] = s + m
 				continue
 			}
-			d[n[i]] = m
+			data[n[i]] = m
 		}
 	}
 
-	if len(d) < 3 {
-		return make(map[string]string), errors.New("no matches found")
+	if _, k := data["amount"]; !k {
+		if *verbose {
+			log.Printf("--- NO MATCHES ---\n%s\n---\n", wording)
+		}
+		err = errors.New("no matches found")
+		return
 	}
 
-	return d, nil
+	return
 }

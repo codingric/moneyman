@@ -16,6 +16,9 @@ RUN go get \
 FROM alpine:3.14
 LABEL org.opencontainers.image.source https://github.com/codingric/moneyman
 
+RUN apk add tzdata \
+    && echo "Australia/Melbourne" >  /etc/timezone
+
 ENTRYPOINT [ "/mailparser" ]
 CMD ["-v"]
 

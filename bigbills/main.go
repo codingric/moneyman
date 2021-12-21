@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"log"
 
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
 	config_path = kingpin.Flag("config", "config.yaml").Default("config.yaml").Short('c').ExistingFile()
-	creds_path  = kingpin.Flag("creds", "credentials.json").Default("credentials.json").Short('g').ExistingFile()
 	verbose     = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
 )
 

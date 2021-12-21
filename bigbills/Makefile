@@ -5,6 +5,6 @@ build:
 package:
 	docker buildx build \
 		--platform linux/arm64 \
-		-t ghcr.io/codingric/moneyman-bigbills \
+		-t ghcr.io/codingric/moneyman/bigbills \
 		--progress plain \
 		--push .

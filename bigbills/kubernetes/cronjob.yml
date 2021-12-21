@@ -14,8 +14,6 @@ spec:
               args:
                 - "-c"
                 - "/etc/bigbills/config.yaml"
-                - "-g"
-                - "/etc/bigbills/credentials.json"
                 - "-v"
               imagePullPolicy: Always
               volumeMounts:

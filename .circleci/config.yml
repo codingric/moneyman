@@ -83,7 +83,7 @@ workflows:
     jobs:
       - build-docker:
           pipe_name: backend
-  build-bgibills:
+  build-bigbills:
     when: "<< pipeline.parameters.bigbills >>"
     jobs:
       - build-docker:

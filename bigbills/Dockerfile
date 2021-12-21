@@ -16,7 +16,10 @@ RUN go mod download \
     && go build
 
 FROM alpine:3.14
-LABEL org.opencontainers.image.source https://gitlab.com/codingric/moneyman/go/bigbills
+LABEL org.opencontainers.image.source https://gitlab.com/codingric/moneyman
+
+RUN apk add tzdata \
+    && echo "Australia/Melbourne" >  /etc/timezone
 
 ENTRYPOINT [ "/bigbills" ]
 CMD ["check"]

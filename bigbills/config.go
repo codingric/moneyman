@@ -7,18 +7,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type Config struct {
-	sid   string `yaml:"sid"`
-	token string `yaml:"token"`
-	//mobiles []string `yaml:"mobiles"`
+type AppConfig struct {
+	Sid         string   `yaml:"sid"`
+	Token       string   `yaml:"token"`
+	Mobiles     []string `yaml:"mobiles"`
+	Credentials string   `yaml:"credentials"`
 }
 
-func LoadConfig(path string) map[interface{}]interface{} {
+func LoadConfig(path string) AppConfig {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Fatal(err)
 	}
-	m := make(map[interface{}]interface{})
+	m := AppConfig{}
 	yaml.Unmarshal(data, &m)
 	return m
 }

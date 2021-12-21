@@ -19,11 +19,11 @@ func main() {
 
 	var bills BigBills
 	config := LoadConfig(*config_path)
-	bills.Hydrate(*creds_path)
+	bills.Hydrate(config)
 	checkLate(bills, config)
 }
 
-func checkLate(b BigBills, c map[interface{}]interface{}) {
+func checkLate(b BigBills, c AppConfig) {
 	late := b.GetLate()
 
 	if len(late) > 0 {

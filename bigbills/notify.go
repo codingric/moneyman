@@ -10,28 +10,28 @@ import (
 	"strings"
 )
 
-func Notify(message string, config map[interface{}]interface{}) (response string, err error) {
+func Notify(message string, config AppConfig) (response string, err error) {
 
-	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + config["sid"].(string) + "/Messages"
+	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + config.Sid + "/Messages"
 
-	for _, mobile := range config["mobiles"].([]interface{}) {
+	for _, mobile := range config.Mobiles {
 		params := url.Values{}
 		params.Set("From", "Budget")
-		params.Set("To", mobile.(string))
+		params.Set("To", mobile)
 		params.Set("Body", message)
 
 		body := *strings.NewReader(params.Encode())
 
 		client := &http.Client{}
 		req, _ := http.NewRequest("POST", endpoint, &body)
-		req.SetBasicAuth(config["sid"].(string), config["token"].(string))
+		req.SetBasicAuth(config.Sid, config.Token)
 		req.Header.Add("Accept", "application/json")
 		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 		res, err2 := client.Do(req)
 
 		if *verbose {
-			log.Printf("Sent message to %s", mobile.(string))
+			log.Printf("Sent message to %s", mobile)
 		}
 
 		if err2 != nil {

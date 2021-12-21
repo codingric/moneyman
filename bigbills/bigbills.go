@@ -28,10 +28,10 @@ type LateBigBill struct {
 	Days   string `json:"days"`
 }
 
-func (b *BigBills) Hydrate(path string) {
+func (b *BigBills) Hydrate(config AppConfig) {
 	ctx := context.Background()
 
-	srv, err := sheets.NewService(ctx, option.WithCredentialsFile(path), option.WithScopes(sheets.SpreadsheetsScope))
+	srv, err := sheets.NewService(ctx, option.WithCredentialsJSON([]byte(config.Credentials)), option.WithScopes(sheets.SpreadsheetsScope))
 
 	if err != nil {
 		log.Fatalf("Unable to retrieve Sheets client: %v", err)

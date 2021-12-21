@@ -8,12 +8,12 @@ WORKDIR /app
 
 RUN apk add gcc libc-dev
 
-COPY *.go ./
 COPY go.sum .
 COPY go.mod .
+RUN go mod download
 
-RUN go mod download \
-    && go build
+COPY *.go ./
+RUN go build
 
 FROM alpine:3.14
 LABEL org.opencontainers.image.source https://gitlab.com/codingric/moneyman

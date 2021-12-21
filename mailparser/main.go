@@ -61,6 +61,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("Invalid payload - %v", err)))
 		if *verbose {
 			log.Printf("Reponded with HTTP/400 - Invalid payload - %s\n", err)
+			rb, _ := io.ReadAll(r.Body)
+			log.Printf("Payload:\n%s\n", string(rb))
 		}
 		return
 	}

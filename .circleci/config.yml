@@ -7,6 +7,9 @@ parameters:
   backend:
     type: boolean
     default: false
+  bigbills:
+    type: boolean
+    default: false
   setup:
     type: boolean
     default: true
@@ -62,6 +65,7 @@ workflows:
           mapping: |
             mailparser/.* mailparser true
             backend/.* backend true
+            bigbills/.* bigbills true
             .* setup false
           base-revision: << pipeline.git.branch >>
           # this is the path of the configuration we should trigger once
@@ -79,3 +83,8 @@ workflows:
     jobs:
       - build-docker:
           pipe_name: backend
+  build-bgibills:
+    when: "<< pipeline.parameters.bigbills >>"
+    jobs:
+      - build-docker:
+          pipe_name: bigbills

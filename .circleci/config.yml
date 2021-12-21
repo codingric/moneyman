@@ -32,7 +32,7 @@ jobs:
       - setup_remote_docker
       - restore_cache:
           keys:
-            - v1-{{ .Branch }}
+            - << parameters.pipe_name >>
           paths:
             - /caches/<< parameters.pipe_name >>.tar
       - run:

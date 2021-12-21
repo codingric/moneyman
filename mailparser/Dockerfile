@@ -4,7 +4,7 @@
 
 FROM golang:alpine AS build
 
-WORKDIR /app
+WORKDIR /build
 
 RUN apk add gcc libc-dev git
 
@@ -23,5 +23,5 @@ RUN apk add tzdata \
 ENTRYPOINT [ "/mailparser" ]
 CMD ["-v"]
 
-COPY --from=build /app/mailparser .
+COPY --from=build /build/mailparser .
 

@@ -4,15 +4,15 @@
 
 FROM golang:alpine AS build
 
-WORKDIR /backend
+WORKDIR /build
 
 RUN apk add gcc libc-dev git
 
 COPY go.sum go.mod .
-RUN go get
+RUN go mod download
 
 COPY . .
-RUN go build
+RUN go build -o backend
 
 FROM alpine:3.14
 LABEL org.opencontainers.image.source https://github.com/codingric/moneyman
@@ -23,5 +23,5 @@ RUN apk add tzdata \
 ENTRYPOINT [ "/backend" ]
 CMD ["-v"]
 
-COPY --from=build /backend/backend .
+COPY --from=build /build/backend .
 

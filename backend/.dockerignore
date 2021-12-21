@@ -9,3 +9,4 @@ Makefile
 kubernetes
 Dockerfile
 .dockerignore
+docker-compose.yml

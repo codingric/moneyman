@@ -4,7 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/codingric/moneyman/backend/models"
+	"models"
+
 	"github.com/gin-gonic/gin"
 )
 

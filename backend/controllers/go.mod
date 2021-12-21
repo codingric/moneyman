@@ -1,10 +1,9 @@
-module github.com/codingric/moneyman/backend/controllers
+module controllers
 
 go 1.17
 
-
 require (
-	github.com/codingric/moneyman/backend/models v0.0.0-20211208110001-8f8f149db582
+	models v0.0.0
 	github.com/gin-gonic/gin v1.7.7
 )
 
@@ -28,4 +27,9 @@ require (
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 	gorm.io/driver/sqlite v1.2.6 // indirect
 	gorm.io/gorm v1.22.4 // indirect
+)
+
+replace (
+	controllers => ./controllers
+	models => ./models
 )

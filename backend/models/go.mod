@@ -1,4 +1,4 @@
-module github.com/codingric/moneyman/backend/models
+module models
 
 go 1.17
 

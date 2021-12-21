@@ -8,10 +8,9 @@ WORKDIR /build
 
 RUN apk add gcc libc-dev git
 
-COPY go.sum go.mod .
+COPY . /build/
 RUN go mod download
 
-COPY . .
 RUN go build -o backend
 
 FROM alpine:3.14

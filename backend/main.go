@@ -16,9 +16,8 @@ var (
 )
 
 func main() {
+	gin.SetMode(gin.ReleaseMode)
 	kingpin.Parse()
-	// gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
 
 	if *verbose {
 		log.Printf("Database: %s", *database_path)
@@ -26,6 +25,13 @@ func main() {
 
 	// Connect to database
 	models.ConnectDatabase(*database_path)
+
+	// Run the server
+	setupServer().Run()
+}
+
+func setupServer() *gin.Engine {
+	r := gin.Default()
 
 	// Routes
 	r.GET("/accounts", controllers.FindAccounts)
@@ -39,6 +45,5 @@ func main() {
 	r.POST("/transactions", controllers.CreateTransaction)
 	r.POST("/upload", controllers.Upload)
 
-	// Run the server
-	r.Run()
+	return r
 }

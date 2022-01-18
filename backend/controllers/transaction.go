@@ -81,7 +81,7 @@ func CreateTransaction(c *gin.Context) {
 		return
 	}
 
-	b := []string{input.Created.Format("2006-01-02"), input.Account, input.Amount, input.Description}
+	b := []string{fmt.Sprint(input.Created.Unix()), input.Account, input.Amount, input.Description}
 	d := strings.Join(b, "!")
 	h := md5.Sum([]byte(d))
 
@@ -130,7 +130,7 @@ func Upload(c *gin.Context) {
 			amount = row[4]
 		}
 
-		b := []string{created.Format("2006-01-02"), row[1], amount, row[2]}
+		b := []string{fmt.Sprint(created.Unix()), row[1], amount, row[2]}
 		d := strings.Join(b, "!")
 		log.Print(d)
 		h := md5.Sum([]byte(d))

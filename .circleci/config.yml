@@ -43,6 +43,7 @@ jobs:
       - run:
           name: Build application Docker image
           working_directory: << parameters.pipe_name >>
+          no_output_timeout: 15m
           command: |
             export DOCKER_CLI_EXPERIMENTAL=enabled
             export IMAGE_NAME=<< parameters.pipe_name >>

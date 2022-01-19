@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"google.golang.org/api/option"
-	"google.golang.org/api/sheets/v4"
+	sheets "google.golang.org/api/sheets/v4"
 )
 
 type BigBillDate struct {
@@ -39,8 +39,8 @@ func (b *BigBills) Hydrate(config AppConfig) {
 
 	// Prints the names and majors of students in a sample spreadsheet:
 	// https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
-	spreadsheetId := "1ieIu38LUKZVK24FAoNSjgVC6bQLeyD6PTbcZo_uIdig"
-	readRange := "Big Bills!M2:P"
+	spreadsheetId := config.SpreadsheetId
+	readRange := config.SpreadsheetRange
 	resp, err := srv.Spreadsheets.Values.Get(spreadsheetId, readRange).Do()
 	if err != nil {
 		log.Fatalf("Unable to retrieve data from sheet: %v", err)

@@ -8,10 +8,12 @@ import (
 )
 
 type AppConfig struct {
-	Sid         string   `yaml:"sid"`
-	Token       string   `yaml:"token"`
-	Mobiles     []string `yaml:"mobiles"`
-	Credentials string   `yaml:"credentials"`
+	Sid              string   `yaml:"sid"`
+	Token            string   `yaml:"token"`
+	Mobiles          []string `yaml:"mobiles"`
+	Credentials      string   `yaml:"credentials"`
+	SpreadsheetId    string   `yaml:"spreadsheet_id"`
+	SpreadsheetRange string   `yaml:"spreadsheet_range"`
 }
 
 func LoadConfig(path string) AppConfig {

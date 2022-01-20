@@ -8,7 +8,7 @@ WORKDIR /build
 
 RUN apk add gcc libc-dev git
 
-COPY go.sum go.mod .
+COPY go.sum go.mod ./
 RUN go mod download
 
 COPY . .
@@ -20,8 +20,7 @@ LABEL org.opencontainers.image.source https://github.com/codingric/moneyman
 RUN apk add tzdata \
     && echo "Australia/Melbourne" >  /etc/timezone
 
-ENTRYPOINT [ "/mailparser" ]
-CMD ["-v"]
+ENTRYPOINT [ "/usr/bin/mailparser" ]
 
-COPY --from=build /build/mailparser .
+COPY --from=build /build/mailparser /usr/bin/
 

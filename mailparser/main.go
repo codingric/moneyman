@@ -2,98 +2,125 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"path/filepath"
 	"regexp"
 	"time"
 
-	"gopkg.in/alecthomas/kingpin.v2"
-	"gopkg.in/yaml.v2"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
-
-var (
-	config_path = kingpin.Flag("config", "Config").Default("config.yaml").Short('c').String()
-	verbose     = kingpin.Flag("verbose", "Verbosity").Short('v').Bool()
-	config      ConfigType
-)
-
-type ConfigType struct {
-	Port     string   `yaml:"port"`
-	Webhook  string   `yaml:"webhook"`
-	Patterns []string `yaml:"patterns"`
-}
 
 type Dict map[string]string
 
 type Json map[string]interface{}
 
 func main() {
-	kingpin.Parse()
 
-	config.Load(*config_path)
+	Configure()
 
 	http.HandleFunc("/", Handler)
-	log.Println("Server started at port " + config.Port)
-	log.Fatal(http.ListenAndServe(":"+config.Port, nil))
+	log.Println("Server started at port " + viper.GetString("port"))
+	log.Fatal(http.ListenAndServe(":"+viper.GetString("port"), nil))
 }
 
-func (c *ConfigType) Load(path string) {
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		log.Fatal(err)
+func Configure() {
+	viper.SetDefault("logging", map[string]string{"path": ".", "type": "none"})
+	viper.SetDefault("port", "8081")
+
+	flag.Bool("v", false, "Verbose")
+
+	viper.RegisterAlias("verbose", "v")
+
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+	pflag.Parse()
+	viper.BindPFlags(pflag.CommandLine)
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.AddConfigPath("/etc/mailparser/")
+	err := viper.ReadInConfig() // Find and read the config file
+	if err != nil {             // Handle errors reading the config file
+		log.Fatalf("%v\n", err)
 	}
-	yaml.Unmarshal(data, c)
-	if *verbose {
-		log.Printf("Loaded %s\n", path)
+
+	if viper.GetBool("verbose") {
+		log.Println("Verbose: ON")
+		log.Printf("Config: `%s`\n", viper.ConfigFileUsed())
+	} else {
+		log.Println("Verbose: OFF")
+
 	}
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-
-	log.Println("Received request")
-
+	dump, _ := httputil.DumpRequest(r, true)
 	body, _ := ioutil.ReadAll(r.Body)
+	hash := md5.Sum(dump)
+
+	log.Printf("Received request - %x\n", hash)
 
 	data, err := parseMessage(body)
 	if err != nil {
 		w.WriteHeader(400)
-		w.Write([]byte(fmt.Sprintf("Invalid payload - %v", err)))
-		if *verbose {
-			log.Printf("Reponded with HTTP/400 - Invalid payload - %s\n", err)
-			//log.Printf("Payload:\n%s\n", string(body))
+		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
+		if viper.GetBool("verbose") {
+			log.Printf("Parsing failed: %s\n", err)
 		}
+		fn := filepath.Join(viper.GetString("logging.path"), fmt.Sprintf("%x.dump", hash))
+		err := ioutil.WriteFile(fn, dump, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Saved request: %s", fn)
 		return
 	}
 	data["account"] = r.RequestURI[1:]
 
-	if *verbose {
+	if viper.GetBool("verbose") {
 		log.Printf("Parsed - %v\n", data)
 	}
 
 	jb, _ := json.Marshal(data)
-	resp, post_err := http.Post(config.Webhook, "application/json", bytes.NewReader(jb))
 
-	if post_err != nil {
-		log.Printf("Failed to POST to %s (%s)", config.Webhook, post_err)
-		w.WriteHeader(503)
-		w.Write([]byte("Error"))
-		return
-	}
+	if viper.GetString("webhook") != "" {
+		resp, post_err := http.Post(viper.GetString("webhook"), "application/json", bytes.NewReader(jb))
 
-	if *verbose {
-		rb, _ := io.ReadAll(resp.Body)
-		log.Printf("POST response: %s", string(rb))
-	}
+		if post_err != nil {
+			log.Printf("Webhook failed: %s (%s)", viper.GetString("webhook"), post_err)
+			w.WriteHeader(503)
+			w.Write([]byte("Error"))
+			return
+		}
 
-	if *verbose {
-		log.Println("Reponded with HTTP/200 - OK")
+		if viper.GetBool("verbose") {
+			rb, _ := io.ReadAll(resp.Body)
+			log.Printf("Webhook response: %s", string(rb))
+		}
+
 	}
 	w.Write([]byte("OK"))
+	if viper.GetBool("verbose") {
+		log.Println("Successfully processed")
+	}
+	if viper.GetString("logging.type") == "all" {
+		fn := filepath.Join(viper.GetString("logging.path"), fmt.Sprintf("%x.dump", hash))
+		err := ioutil.WriteFile(fn, dump, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Saved request %s", fn)
+	}
 }
 
 const remove = `<.*?>|\n+`
@@ -136,11 +163,13 @@ func parseMessage(body []byte) (data Dict, err error) {
 	dt, _ := time.Parse(time.RFC1123Z, json_["headers"].(map[string]interface{})["date"].(string))
 	data["created"] = dt.Format("2006-01-02T15:04:05Z07:00")
 
-	for _, p := range config.Patterns {
+	for _, p := range viper.GetStringSlice("patterns") {
 		r := regexp.MustCompile(p)
 		n := r.SubexpNames()
 		s := ""
+		//log.Printf("TESTING: `%s`", p)
 		for i, m := range r.FindStringSubmatch(wording) {
+			//log.Printf("MATCHED: %s=`%s`", n[i], m)
 			switch n[i] {
 			case "":
 				continue
@@ -156,10 +185,18 @@ func parseMessage(body []byte) (data Dict, err error) {
 	}
 
 	if _, k := data["amount"]; !k {
-		if *verbose {
+		if viper.GetBool("verbose") {
 			log.Printf("--- NO MATCHES ---\n%s\n---\n", wording)
 		}
 		err = errors.New("no matches found")
+		if viper.GetString("logging") == "failure" {
+			hash := json_["envelope"].(map[string]interface{})["md5"].(string)
+			err := ioutil.WriteFile(hash+".json", body, 0644)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("Saved failed request %s.json", hash)
+		}
 		return
 	}
 

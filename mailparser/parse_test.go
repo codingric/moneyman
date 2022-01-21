@@ -9,6 +9,23 @@ import (
 	"testing"
 )
 
+func LoadConfig() {
+	var config = []byte(`patterns:
+- '(?P<negative>spent) \$(?P<amount>\d{1,}\.\d{2}) at (?P<description>[^.]+)'
+- '(?P<negative>payment) of \$(?P<amount>\d{1,}\.\d{2}) to (?P<description>[^.]+)'
+- '(?P<negative> )\$(?P<amount>\d{1,}\.\d{2}) was moved between your ING accounts, (?P<description>[^.]+)'
+- '(?P<description>withdrawal) of(?P<negative> )\$(?P<amount>\d{1,}\.\d{2}) was made from your'
+- '\$(?P<amount>\d{1,}\.\d{2}) (?P<description>deposit) has been made into your'
+- 'that (?P<description>.*) deposited \$(?P<amount>\d{1,}\.\d{2}) into your'
+- '\$(?P<amount>\d{1,}.\d{2}) has been (?P<description>deposited into your \w+ from your \w+)'`)
+
+	viper.SetConfigType("yaml") // or viper.SetConfigType("YAML")
+
+	viper.ReadConfig(bytes.NewBuffer(config))
+	viper.RegisterAlias("verbose", "v")
+	viper.Set("verbose", false)
+}
+
 func LoadFixture(name string) []byte {
 
 	body := new(bytes.Buffer)
@@ -57,8 +74,7 @@ func (a Dict) Equal(b Dict) bool {
 }
 
 func TestMain(m *testing.M) {
-	Configure()
-	viper.Set("verbose", true)
+	LoadConfig()
 	retCode := m.Run()
 	os.Exit(retCode)
 }

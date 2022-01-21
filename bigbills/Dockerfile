@@ -6,7 +6,7 @@ FROM golang:alpine AS build
 
 WORKDIR /build
 
-RUN apk add gcc libc-dev git && mkdir /build
+RUN apk add gcc libc-dev git
 
 COPY go.sum go.mod ./
 RUN go mod download

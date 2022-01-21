@@ -48,7 +48,7 @@ func (b *BigBills) Hydrate(config AppConfig) {
 
 	if len(resp.Values) == 0 {
 		if *verbose {
-			log.Printf("No data loaded from spreadsheet", len(resp.Values))
+			log.Printf("No data loaded from spreadsheet")
 		}
 	} else {
 		for _, row := range resp.Values {

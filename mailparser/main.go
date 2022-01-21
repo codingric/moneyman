@@ -70,7 +70,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Received request - %x\n", hash)
 
-	data, err := parseMessage(body)
+	data, err := ParseMessage(body)
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
@@ -134,7 +134,7 @@ func stripHtml(str string) string {
 	return s.ReplaceAllString(str, " ")
 }
 
-func parseMessage(body []byte) (data Dict, err error) {
+func ParseMessage(body []byte) (data Dict, err error) {
 
 	if data == nil {
 		data = make(Dict)

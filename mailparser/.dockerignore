@@ -9,6 +9,7 @@ Makefile
 .gitignore
 kubernetes
 Dockerfile
+*.Dockerfile
 .dockerignore
 *.log
 fixtures

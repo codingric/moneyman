@@ -30,6 +30,12 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker
+      - run:
+          name: "Run Tests"
+          working_directory: << parameters.pipe_name >>
+          no_output_timeout: 15m
+          command: |
+            make -f ../Makefile test
       - run: mkdir /tmp/cache
       - restore_cache:
           keys:

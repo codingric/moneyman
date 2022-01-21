@@ -1,6 +1,7 @@
 *.db
 *.json
 *.csv
-*.yaml
+config.yaml
 mailparser
 *.log
+coverage.*

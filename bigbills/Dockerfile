@@ -6,9 +6,9 @@ FROM golang:alpine AS build
 
 WORKDIR /build
 
-RUN apk add gcc libc-dev git
+RUN apk add gcc libc-dev git && mkdir /build
 
-COPY go.sum go.mod .
+COPY go.sum go.mod ./
 RUN go mod download
 
 COPY . .
@@ -20,8 +20,8 @@ LABEL org.opencontainers.image.source https://gitlab.com/codingric/moneyman
 RUN apk add tzdata \
     && echo "Australia/Melbourne" >  /etc/timezone
 
-ENTRYPOINT [ "/bigbills" ]
+ENTRYPOINT [ "/usr/bin/bigbills" ]
 CMD ["check"]
 
-COPY --from=build /build/bigbills .
+COPY --from=build /build/bigbills /usr/bin/
 

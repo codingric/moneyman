@@ -10,3 +10,6 @@ package:
 		--progress plain \
 		--push \
 		.
+
+test:
+	docker-compose run test

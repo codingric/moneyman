@@ -34,8 +34,7 @@ jobs:
           name: "Run Tests"
           working_directory: << parameters.pipe_name >>
           no_output_timeout: 15m
-          command: |
-            make -f ../Makefile test
+          command: make test
       - run: mkdir /tmp/cache
       - restore_cache:
           keys:
@@ -52,8 +51,7 @@ jobs:
           no_output_timeout: 15m
           command: |
             export DOCKER_CLI_EXPERIMENTAL=enabled
-            export IMAGE_NAME=<< parameters.pipe_name >>
-            make -f ../Makefile package
+            make package
       - save_cache:
           key: << parameters.pipe_name >>-v1
           paths:

@@ -167,9 +167,7 @@ func ParseMessage(body []byte) (data Dict, err error) {
 		r := regexp.MustCompile(p)
 		n := r.SubexpNames()
 		s := ""
-		//log.Printf("TESTING: `%s`", p)
 		for i, m := range r.FindStringSubmatch(wording) {
-			//log.Printf("MATCHED: %s=`%s`", n[i], m)
 			switch n[i] {
 			case "":
 				continue

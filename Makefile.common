@@ -1,7 +1,6 @@
-build:
-	go build
+IMAGE_NAME ?= $(shell basename $$(pwd))
 
-package:
+package-common:
 	docker buildx build \
 		--cache-from=type=local,src=/tmp/cache \
 		--cache-to=type=local,dest=/tmp/cache \
@@ -11,5 +10,8 @@ package:
 		--push \
 		.
 
-test:
+test-common:
 	docker-compose run test
+
+%: %-common
+	@true

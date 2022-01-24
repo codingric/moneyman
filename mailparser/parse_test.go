@@ -96,18 +96,17 @@ func TestMovedBetween(t *testing.T) {
 	)
 }
 
-func TestDepositedFrom(t *testing.T) {
+func TestRecentlySpent(t *testing.T) {
 	RunValidation(
 		"recently_spent",
 		Dict{"created": "2022-01-21T08:33:13+11:00", "amount": "-5.00", "description": "TOSSD PL DO"},
 		t,
 	)
 }
-
-func TestRecentlySpent(t *testing.T) {
+func TestDepositedFrom(t *testing.T) {
 	RunValidation(
 		"deposited_from",
-		Dict{"created": "2022-01-21T01:58:02+11:00", "amount": "3.04", "description": "deposited into your Bills from your Spending"},
+		Dict{"created": "2022-01-24T08:14:15+11:00", "amount": "71.34", "description": "deposited into your Spending from your Food"},
 		t,
 	)
 }

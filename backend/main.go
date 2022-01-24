@@ -24,14 +24,15 @@ func main() {
 	}
 
 	// Connect to database
-	models.ConnectDatabase(*database_path)
+	models.ConnectDatabase(*database_path, *verbose)
 
 	// Run the server
-	setupServer().Run()
+	setupServer(true).Run()
 }
 
-func setupServer() *gin.Engine {
-	r := gin.Default()
+func setupServer(debug bool) *gin.Engine {
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
 
 	// Routes
 	r.GET("/accounts", controllers.FindAccounts)

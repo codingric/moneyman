@@ -31,24 +31,34 @@ func FindTransactions(c *gin.Context) {
 		p := strings.Split(filter, "__")
 		op := "eq"
 		field := filter
+		val := value[0]
+
 		if len(p) > 1 {
 			field = p[0]
 			op = p[1]
 		}
-		log.Printf("Filter: %v %v %v", field, op, value[0])
+		switch field {
+		case "created":
+			d, _ := time.Parse("2006-01-02T15:04:05", val)
+			val = d.Format("2006-01-02 15:04:05")
+		}
+		if models.Debug {
+			log.Printf("Filter: %v %v %v", field, op, val)
+		}
+
 		switch op {
 		case "like":
-			query = query.Where(field+" LIKE ?", "%"+value[0]+"%")
+			query = query.Where(field+" LIKE ?", "%"+val+"%")
 		case "gt":
-			query = query.Where(field+" > ?", value[0])
+			query = query.Where(field+" > ?", val)
 		case "ge":
-			query = query.Where(field+" >= ?", value[0])
+			query = query.Where(field+" >= ?", val)
 		case "lt":
-			query = query.Where(field+" < ?", value[0])
+			query = query.Where(field+" < ?", val)
 		case "le":
-			query = query.Where(field+" <= ?", value[0])
+			query = query.Where(field+" <= ?", val)
 		default:
-			query = query.Where(field+" = ?", value[0])
+			query = query.Where(field+" = ?", val)
 		}
 	}
 	var transactions []models.Transaction
@@ -77,15 +87,18 @@ func CreateTransaction(c *gin.Context) {
 	var input CreateTransactionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		log.Printf("CreateTransaction.error: %s", err.Error())
+		if models.Debug {
+			log.Printf("CreateTransaction.error: %s", err.Error())
+		}
 		return
 	}
 
 	b := []string{fmt.Sprint(input.Created.Unix()), input.Account, input.Amount, input.Description}
 	d := strings.Join(b, "!")
 	h := md5.Sum([]byte(d))
-
-	log.Printf("Hash: %x", h)
+	if models.Debug {
+		log.Printf("Hash: %x", h)
+	}
 
 	// Create transaction
 	f, _ := strconv.ParseFloat(input.Amount, 64)
@@ -132,7 +145,6 @@ func Upload(c *gin.Context) {
 
 		b := []string{fmt.Sprint(created.Unix()), row[1], amount, row[2]}
 		d := strings.Join(b, "!")
-		log.Print(d)
 		h := md5.Sum([]byte(d))
 
 		hashes = append(hashes, fmt.Sprintf("%x", h))

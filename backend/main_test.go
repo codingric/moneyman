@@ -6,6 +6,7 @@ import (
 	"models"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,52 +36,88 @@ func RunPostRequest(url string, payload string) (statusCode int, response string
 	return
 }
 
-func TestTransactions(t *testing.T) {
-	//gin.SetMode(gin.ReleaseMode)
-	models.ConnectDatabase(":memory:")
-	ts := httptest.NewServer(setupServer())
+func RunTest(t *testing.T, method string, url string, payload string, expected string, statusCode string) {
 
-	defer ts.Close()
-
-	tests := [][]string{
-		{"GET", fmt.Sprintf("%s/transactions", ts.URL), `{"data":[]}`, "200", ""},
-		{"GET", fmt.Sprintf("%s/transactions/1", ts.URL), `{"error":"Record not found!"}`, "400", ``},
-		{"GET", fmt.Sprintf("%s/transactions?idx=1", ts.URL), `{"data":null}`, "200", ""},
-		{"POST", fmt.Sprintf("%s/transactions", ts.URL), `{"error":"EOF"}`, "400", ``},
-		{"POST", fmt.Sprintf("%s/transactions", ts.URL), `{"error":"Key: 'CreateTransactionInput.Account' Error:Field validation for 'Account' failed on the 'required' tag"}`, "400", `{"created":"2000-01-01T00:00:00+11:00","amount":"12.50","description":"test"}`},
-		{"POST", fmt.Sprintf("%s/transactions", ts.URL), `{"data":{"id":1,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:00+11:00"}}`, "200", `{"created":"2000-01-01T00:00:00+11:00","amount":"12.50","description":"test","account":"1234567890"}`},
-		{"GET", fmt.Sprintf("%s/transactions/1", ts.URL), `{"data":{"id":1,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:00+11:00"}}`, "200", ``},
-		{"POST", fmt.Sprintf("%s/transactions", ts.URL), `{"data":{"id":2,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:01+11:00"}}`, "200", `{"created":"2000-01-01T00:00:01+11:00","amount":"12.50","description":"test","account":"1234567890"}`},
-		{"GET", fmt.Sprintf("%s/transactions/2", ts.URL), `{"data":{"id":2,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:01+11:00"}}`, "200", ``},
-		{"POST", fmt.Sprintf("%s/transactions", ts.URL), `{"error":{"Code":19,"ExtendedCode":2067,"SystemErrno":0}}`, "400", `{"created":"2000-01-01T00:00:01+11:00","amount":"12.50","description":"test","account":"1234567890"}`},
-		{"GET", fmt.Sprintf("%s/transactions?id=1", ts.URL), `{"data":[{"id":1,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:00+11:00"}]}`, "200", ""},
-		{"GET", fmt.Sprintf("%s/transactions?id__gt=1", ts.URL), `{"data":[{"id":2,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:01+11:00"}]}`, "200", ""},
-		{"POST", fmt.Sprintf("%s/transactions", ts.URL), `{"data":{"id":3,"description":"target","amount":12.5,"account":987654321,"created":"2000-01-03T00:00:01+11:00"}}`, "200", `{"created":"2000-01-03T00:00:01+11:00","amount":"12.50","description":"target","account":"0987654321"}`},
-		{"GET", fmt.Sprintf("%s/transactions?description__like=target", ts.URL), `{"data":[{"id":3,"description":"target","amount":12.5,"account":987654321,"created":"2000-01-03T00:00:01+11:00"}]}`, "200", ""},
+	var code int
+	var response string
+	var err error
+	if method == "GET" {
+		code, response, err = RunGetRequest(fmt.Sprintf("%s/%s", TestServer.URL, url))
+	} else {
+		code, response, err = RunPostRequest(fmt.Sprintf("%s/%s", TestServer.URL, url), payload)
 	}
 
-	for _, test := range tests {
-		var code int
-		var response string
-		var err error
-		if test[0] == "GET" {
-			code, response, err = RunGetRequest(test[1])
-		} else {
-			code, response, err = RunPostRequest(test[1], test[4])
-		}
-
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		c, _ := strconv.Atoi(test[3])
-
-		if code != c {
-			t.Fatalf("%s %s - Expected status code %v, got %v", test[0], test[1], test[3], code)
-		}
-
-		if response != test[2] {
-			t.Fatalf("%s %s - Expected '%s' got '%s'", test[0], test[1], test[2], response)
-		}
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
 	}
+
+	c, _ := strconv.Atoi(statusCode)
+
+	if code != c {
+		t.Fatalf("%s %s - Expected status code %v, got %v", method, url, statusCode, code)
+	}
+
+	if response != expected {
+		t.Fatalf("%s %s - Expected '%s' got '%s'", method, url, expected, response)
+	}
+
+}
+
+var TestServer *httptest.Server
+
+func TestMain(m *testing.M) {
+	models.ConnectDatabase(":memory:", false)
+	TestServer = httptest.NewServer(setupServer(false))
+	defer TestServer.Close()
+	retCode := m.Run()
+	os.Exit(retCode)
+}
+func TestCleanTransactions(t *testing.T) {
+	RunTest(t, "GET", "transactions", ``, `{"data":[]}`, "200")
+}
+
+func TestRecordNotFound(t *testing.T) {
+	RunTest(t, "GET", "transactions/1", ``, `{"error":"Record not found!"}`, "400")
+}
+
+func TestInvalidFilter(t *testing.T) {
+	RunTest(t, "GET", "transactions?idx=1", "", `{"data":null}`, "200")
+}
+
+func TestEmptyPost(t *testing.T) {
+	RunTest(t, "POST", "transactions", ``, `{"error":"EOF"}`, "400")
+}
+
+func TestCreateMissingField(t *testing.T) {
+	RunTest(t, "POST", "transactions", `{"created":"2000-01-01T00:00:00+11:00","amount":"12.50","description":"test"}`, `{"error":"Key: 'CreateTransactionInput.Account' Error:Field validation for 'Account' failed on the 'required' tag"}`, "400")
+}
+
+func TestCreateSucessfully(t *testing.T) {
+	RunTest(t, "POST", "transactions", `{"created":"2000-01-01T00:00:01+11:00","amount":"12.50","description":"test","account":"1234567890"}`, `{"data":{"id":1,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:01+11:00"}}`, "200")
+	RunTest(t, "POST", "transactions", `{"created":"2000-01-01T00:00:02+11:00","amount":"12.50","description":"test","account":"1234567890"}`, `{"data":{"id":2,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:02+11:00"}}`, "200")
+}
+
+func TestRetrieveSuccessfully(t *testing.T) {
+	RunTest(t, "GET", "transactions/1", ``, `{"data":{"id":1,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:01+11:00"}}`, "200")
+}
+
+func TestCreateDuplicate(t *testing.T) {
+	RunTest(t, "POST", "transactions", `{"created":"2000-01-01T00:00:01+11:00","amount":"12.50","description":"test","account":"1234567890"}`, `{"error":{"Code":19,"ExtendedCode":2067,"SystemErrno":0}}`, "400")
+}
+
+func TestFilterById(t *testing.T) {
+	RunTest(t, "GET", "transactions?id=1", "", `{"data":[{"id":1,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:01+11:00"}]}`, "200")
+}
+
+func TestFilterGreaterThan(t *testing.T) {
+	RunTest(t, "GET", "transactions?id__gt=1", "", `{"data":[{"id":2,"description":"test","amount":12.5,"account":1234567890,"created":"2000-01-01T00:00:02+11:00"}]}`, "200")
+}
+
+func TestFilterLike(t *testing.T) {
+	RunTest(t, "POST", "transactions", `{"created":"2000-01-03T00:00:03+11:00","amount":"12.50","description":"target","account":"0987654321"}`, `{"data":{"id":3,"description":"target","amount":12.5,"account":987654321,"created":"2000-01-03T00:00:03+11:00"}}`, "200")
+	RunTest(t, "GET", "transactions?description__like=target", "", `{"data":[{"id":3,"description":"target","amount":12.5,"account":987654321,"created":"2000-01-03T00:00:03+11:00"}]}`, "200")
+}
+
+func TestFilterByCreated(t *testing.T) {
+	RunTest(t, "GET", "transactions?created__gt=2000-01-03T00:00:00", "", `{"data":[{"id":3,"description":"target","amount":12.5,"account":987654321,"created":"2000-01-03T00:00:03+11:00"}]}`, "200")
 }

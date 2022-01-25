@@ -10,6 +10,9 @@ parameters:
   bigbills:
     type: boolean
     default: false
+  auditor:
+    type: boolean
+    default: false
   setup:
     type: boolean
     default: true
@@ -72,6 +75,7 @@ workflows:
             mailparser/.* mailparser true
             backend/.* backend true
             bigbills/.* bigbills true
+            auditor/.* auditor true
             .* setup false
           base-revision: << pipeline.git.branch >>
           # this is the path of the configuration we should trigger once
@@ -94,3 +98,8 @@ workflows:
     jobs:
       - build-docker:
           pipe_name: bigbills
+  build-auditor:
+    when: "<< pipeline.parameters.auditor >>"
+    jobs:
+      - build-docker:
+          pipe_name: auditor

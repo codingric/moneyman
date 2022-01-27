@@ -1,9 +1,27 @@
-FROM frolvlad/alpine-python3
-LABEL org.opencontainers.image.source https://github.com/codingric/moneyman
+##
+# checkov:skip=CKV_DOCKER_2:Build stage image
+# checkov:skip=CKV_DOCKER_3:Build stage image
 
-RUN pip install requests pyaml
+FROM golang:alpine AS build
 
-CMD ["python3", "main.py"]
+WORKDIR /build
 
-COPY main.py .
+RUN apk add gcc libc-dev git
+
+COPY go.sum go.mod ./
+RUN go mod download
+
+COPY . .
+RUN go build -o auditor
+
+FROM alpine:3.14
+LABEL org.opencontainers.image.source https://gitlab.com/codingric/moneyman
+
+RUN apk add tzdata \
+    && echo "Australia/Melbourne" >  /etc/timezone
+
+ENTRYPOINT [ "/usr/bin/auditor" ]
+CMD ["-v"]
+
+COPY --from=build /build/auditor /usr/bin/
 

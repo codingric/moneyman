@@ -72,7 +72,7 @@ workflows:
           # line:
           # <regex path-to-test> <parameter-to-set> <value-of-pipeline-parameter>
           mapping: |
-            mailparser/.* mailparser true
+            mailparser/(go\..*|.*\.go|Dockerfile) mailparser true
             backend/.* backend true
             bigbills/.* bigbills true
             auditor/.* auditor true

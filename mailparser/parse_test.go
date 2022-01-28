@@ -3,10 +3,11 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"github.com/spf13/viper"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func LoadConfig() {
@@ -59,12 +60,12 @@ func LoadFixture(name string) []byte {
 }
 
 func (a Dict) Equal(b Dict) bool {
-	for k, _ := range a {
+	for k := range a {
 		if a[k] != b[k] {
 			return false
 		}
 	}
-	for k, _ := range b {
+	for k := range b {
 		if b[k] != a[k] {
 			return false
 		}

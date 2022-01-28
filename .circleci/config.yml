@@ -72,10 +72,10 @@ workflows:
           # line:
           # <regex path-to-test> <parameter-to-set> <value-of-pipeline-parameter>
           mapping: |
-            mailparser/(go\..*|.*\.go|Dockerfile) mailparser true
-            backend/.* backend true
-            bigbills/.* bigbills true
-            auditor/.* auditor true
+            mailparser/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile) mailparser true
+            backend/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile) backend true
+            bigbills/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile) bigbills true
+            auditor/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile) auditor true
             .* setup false
           base-revision: << pipeline.git.branch >>
           # this is the path of the configuration we should trigger once

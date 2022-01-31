@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/xml"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/monaco-io/request"
@@ -43,20 +46,29 @@ func main() {
 	RunChecks()
 }
 
-func RunChecks() {
+func RunChecks() error {
 	for name := range viper.GetStringMap("checks") {
 		from := viper.GetString("checks." + name + ".from")
 		to := viper.GetString("checks." + name + ".to")
-		outstanding := RunCheck(name, from)
+		outstanding, err := RunCheck(name, from)
+		if err != nil {
+			log.Printf("Error during check: %s", err.Error())
+			return err
+		}
 
 		if len(outstanding) > 0 {
 			message := fmt.Sprintf("Move money from %s to %s:", from, to)
 			for _, row := range outstanding {
 				message = fmt.Sprintf("%s\n%s", message, row)
 			}
-			Notify(message)
+			err = Notify(message)
+			if err != nil {
+				log.Printf("Error during notify: %s", err.Error())
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 type APIResponse struct {
@@ -64,14 +76,14 @@ type APIResponse struct {
 }
 
 type APITransaction struct {
-	Id          string    `json:"id" gorm:"primary_key"`
+	Id          int64     `json:"id"`
 	Description string    `json:"description"`
 	Amount      float32   `json:"amount"`
-	Account     string    `json:"account"`
+	Account     int64     `json:"account"`
 	Created     time.Time `json:"created"`
 }
 
-func RunCheck(name string, from string) (result []string) {
+func RunCheck(name string, from string) (result []string, err error) {
 	if viper.GetBool("verbose") {
 		log.Println("Checking:", name)
 	}
@@ -79,6 +91,7 @@ func RunCheck(name string, from string) (result []string) {
 	params := map[string]string{
 		"description__like": name,
 		"created__gt":       past.Format("2006-01-02T15:04:05"),
+		"amount__lt":        "0",
 	}
 
 	client := request.Client{
@@ -89,7 +102,17 @@ func RunCheck(name string, from string) (result []string) {
 
 	var response APIResponse
 
-	client.Send().Scan(&response)
+	check := client.Send() //.Scan(&response)
+
+	if check.Response().StatusCode != 200 {
+		err = errors.New(strings.ToLower(check.String()))
+		return
+	}
+
+	if !check.Scan(&response).OK() {
+		err = check.Error()
+		return
+	}
 
 	for _, transaction := range response.Data {
 		p := map[string]string{
@@ -103,7 +126,16 @@ func RunCheck(name string, from string) (result []string) {
 			Query:  p,
 		}
 		var rr APIResponse
-		c.Send().Scan(&rr)
+		cc := c.Send()
+		if cc.Response().StatusCode != 200 {
+			err = errors.New(strings.ToLower(cc.String()))
+			return
+		}
+
+		if !cc.Scan(&rr).OK() {
+			err = cc.Error()
+			return
+		}
 
 		if len(rr.Data) == 0 {
 			m := fmt.Sprintf("$%0.2f from %s", transaction.Amount*-1, transaction.Created.Format("Mon 2 Jan"))
@@ -111,13 +143,32 @@ func RunCheck(name string, from string) (result []string) {
 		}
 	}
 
+	if len(response.Data) > 0 && viper.GetBool("verbose") {
+		unpaid := len(result)
+		found := len(response.Data)
+		log.Printf("Transactions: %d/%d repaid", found-unpaid, found)
+	}
+
 	return
 }
 
-func Notify(message string) {
+type TwilioResponse struct {
+	XMLName       xml.Name            `xml:"TwilioResponse"`
+	RestException TwilioRestException `xml:"RestException"`
+}
+
+type TwilioRestException struct {
+	XMLName  xml.Name `xml:"RestException"`
+	Code     int64    `xml:"Code"`
+	Message  string   `xml:"Message"`
+	MoreInfo string   `xml:"MoreInfo"`
+	Status   int64    `xml:"Status"`
+}
+
+func Notify(message string) (err error) {
 	if viper.GetBool("dryrun") {
 		log.Println("SMS Constructed\n", message)
-		return
+		return nil
 	}
 
 	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + viper.GetString("notify.sid") + "/Messages"
@@ -134,10 +185,27 @@ func Notify(message string) {
 			BasicAuth:      request.BasicAuth{viper.GetString("notify.sid"), viper.GetString("notify.token")},
 			URLEncodedForm: body,
 		}
-		client.Send()
+		resp := client.Send()
+
+		if resp.Response().StatusCode != 200 {
+			switch resp.Response().StatusCode {
+			case 401:
+				err = errors.New("authentication failure")
+				break
+			case 400:
+				var xml TwilioResponse
+				resp.ScanXML(&xml)
+				err = errors.New(xml.RestException.Message)
+				break
+			default:
+				err = errors.New("twilio responded with failure")
+			}
+			return err
+		}
+
 		if viper.GetBool("verbose") {
-			log.Println("Sent SMS Successfully:\n", message)
+			log.Println("Sent SMS Successfully")
 		}
 	}
-
+	return nil
 }

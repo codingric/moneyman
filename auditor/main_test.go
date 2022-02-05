@@ -3,9 +3,9 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -44,14 +44,12 @@ var success_resp = `{
 	"uri": "/2010-04-01/Accounts/ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/Messages/SMXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.json"
   }`
 
-func FindAllGroups(regex string, target string) map[string]string {
+func GetParams(target string) map[string]string {
 	matches := make(map[string]string)
-	re := regexp.MustCompile(regex)
-	n := re.SubexpNames()
-	for i, m := range re.FindStringSubmatch(target) {
-		if n[i] != "" {
-			matches[n[i]] = m
-		}
+	re := regexp.MustCompile(`(?P<key>[\w]+)=(?P<value>[^\s&]+)`)
+	m := re.FindAllStringSubmatch(target, -1)
+	for _, k := range m {
+		matches[k[1]] = k[2]
 	}
 	return matches
 }
@@ -59,11 +57,15 @@ func FindAllGroups(regex string, target string) map[string]string {
 func SetUpConfig() {
 	var config = []byte(`
 checks:
-  MOCK:
-    from: mockfrom
-    to: mockto
-filters:
-  days: 3
+  - type: repay
+    days: 3
+    match: WOOLWORTHS
+    from: Food
+    to: Spending
+  - type: amount
+    expected: $65.00
+    threshold: 20%
+    match: pineapple
 backend: https://api.mock/api/transactions
 notify:
   sid: mocksid
@@ -78,38 +80,55 @@ notify:
 	viper.Set("verbose", false)
 }
 
-func SetMockSuccessTransactions() {
-	all := []APITransaction{
-		{Id: 1, Description: "MOCK", Amount: -1.11, Account: 1234, Created: time.Now()},
-		{Id: 2, Description: "MOCK", Amount: -2.22, Account: 1234, Created: time.Now()},
-		{Id: 3, Description: "MOCK", Amount: -3.33, Account: 1234, Created: time.Now()},
-		{Id: 4, Description: "mockfrom", Amount: 1.11, Account: 1234, Created: time.Now()},
+var (
+	Transactions = []APITransaction{
+		{Id: 1, Description: "WOOLWORTHS", Amount: -1.11, Account: 1234, Created: time.Date(2000, time.January, 1, 0, 0, 1, 0, time.UTC)},
+		{Id: 2, Description: "WOOLWORTHS", Amount: -2.22, Account: 1234, Created: time.Date(2000, time.January, 2, 0, 0, 1, 0, time.UTC)},
+		{Id: 3, Description: "WOOLWORTHS", Amount: -3.33, Account: 1234, Created: time.Date(2000, time.January, 3, 0, 0, 1, 0, time.UTC)},
+		{Id: 4, Description: "Bill", Amount: -60.00, Account: 1234, Created: time.Date(2000, time.January, 3, 10, 0, 1, 0, time.UTC)},
+		{Id: 5, Description: "Salary", Amount: 800.00, Account: 1234, Created: time.Date(2000, time.January, 3, 14, 0, 1, 0, time.UTC)},
+		{Id: 6, Description: "Deposit from Food to Spending", Amount: 1.11, Account: 1234, Created: time.Date(2000, time.January, 4, 0, 0, 1, 0, time.UTC)},
 	}
-	filterByAmount := func(url string) []APITransaction {
-		f := []APITransaction{}
-		m := FindAllGroups(`.*amount(?P<op>__lt|__gt)?=(?P<amount>\d+(\.\d\d)?).*`, url)
-		a, _ := strconv.ParseFloat(m["amount"], 32)
-		for _, i := range all {
-			if m["op"] == "" {
-				if i.Amount == float32(a) {
-					f = append(f, i)
-				}
-			}
-			if m["op"] == "__lt" {
-				if i.Amount < float32(a) {
-					f = append(f, i)
-				}
-			}
-		}
-		return f
-	}
-	httpmock.RegisterResponder("GET", "=~^https://api.mock/api/",
-		func(req *http.Request) (*http.Response, error) {
-			data := APIResponse{Data: filterByAmount(req.URL.RequestURI())}
-			resp, _ := httpmock.NewJsonResponse(200, data)
-			return resp, nil
-		})
+)
 
+func FilterTransactions(m map[string]string) []APITransaction {
+	f := []APITransaction{}
+	for _, i := range Transactions {
+		if a, err := strconv.ParseFloat(m["amount"], 32); err == nil && i.Amount != float32(a) {
+			continue
+		}
+		if a, err := strconv.ParseFloat(m["amount__lt"], 32); err == nil && i.Amount >= float32(a) {
+			continue
+		}
+		if a, err := strconv.ParseFloat(m["amount__gt"], 32); err == nil && i.Amount <= float32(a) {
+			continue
+		}
+		if a, err := strconv.ParseFloat(m["amount__ne"], 32); err == nil && i.Amount == float32(a) {
+			continue
+		}
+		if id, err := strconv.ParseInt(m["id"], 10, 64); err == nil && i.Id != id {
+			continue
+		}
+		if c, err := time.Parse("2006-01-02T15:04:05", m["created__gt"]); err == nil && i.Created.Unix() <= c.Unix() {
+			continue
+		}
+		if c, err := time.Parse("2006-01-02T15:04:05", m["created__lt"]); err == nil && i.Created.Unix() >= c.Unix() {
+			continue
+		}
+		if m["description__like"] != "" && !strings.Contains(i.Description, m["description__like"]) {
+			continue
+		}
+		f = append(f, i)
+	}
+	return f
+}
+
+func MockedAPIResponder(req *http.Request) (*http.Response, error) {
+	url_, _ := url.QueryUnescape(req.URL.RequestURI())
+	m := GetParams(url_)
+	data := APIResponse{Data: FilterTransactions(m)}
+	resp, _ := httpmock.NewJsonResponse(200, data)
+	return resp, nil
 }
 
 func SetMockFailureTransactions() {
@@ -138,37 +157,10 @@ func SetMockTwilio() {
 		})
 }
 
-func SetUpRunChecksMocks() {
-	monkey.Patch(RunCheck, func(name string, from string) (result []string, err error) {
-		return []string{"Patched"}, nil
-	})
-	monkey.Patch(Notify, func(message string) (err error) {
-		return nil
-	})
-}
-
-func TearDownRunChecksMocks() {
-	monkey.Unpatch(RunCheck)
-	monkey.Unpatch(Notify)
-}
-
 func TestMain(m *testing.M) {
 	SetUpConfig()
 	retCode := m.Run()
 	os.Exit(retCode)
-}
-
-func TestRunCheck(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	SetMockSuccessTransactions()
-	viper.Set("verbose", true)
-
-	expected := []string{fmt.Sprintf("$2.22 from %s", time.Now().Format("Mon 2 Jan")), fmt.Sprintf("$3.33 from %s", time.Now().Format("Mon 2 Jan"))}
-
-	result, err := RunCheck("MOCK", "mockfrom")
-	assert.Nil(t, err)
-	assert.Equal(t, expected, result)
 }
 
 func TestNotify(t *testing.T) {
@@ -199,45 +191,313 @@ func TestNotifyFailOnAuth(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
-func TestNegativeRunCheck(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	SetMockFailureTransactions()
-
-	expected := []string(nil)
-
-	result, err := RunCheck("MOCK", "mockfrom")
-	assert.NotNil(t, err)
-	assert.Equal(t, expected, result)
-}
-
 func TestRunChecks(t *testing.T) {
-	SetUpRunChecksMocks()
-	defer TearDownRunChecksMocks()
+	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {
+		return `mock message`, nil
+	})
+	monkey.Patch(Notify, func(message string) (err error) {
+		return nil
+	})
+	monkey.Patch(CheckAmount, func(string, float64, string, int) (string, error) {
+		return "", nil
+	})
+	defer monkey.Unpatch(CheckRepay)
+	defer monkey.Unpatch(CheckAmount)
+	defer monkey.Unpatch(Notify)
 
 	err := RunChecks()
 	assert.Nil(t, err)
 }
 
-func TestRunChecksFailOnChecks(t *testing.T) {
-	monkey.Patch(RunCheck, func(name string, from string) (result []string, err error) {
-		return []string{"Patched"}, errors.New("Failure")
+func TestRunChecksFailOnCheckRepay(t *testing.T) {
+	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {
+		return ``, errors.New("Failure")
 	})
-	defer monkey.Unpatch(RunCheck)
+	defer monkey.Unpatch(CheckRepay)
+	viper.Set("verbose", true)
 
 	err := RunChecks()
 	assert.NotNil(t, err)
 }
 func TestRunChecksFailOnNotify(t *testing.T) {
-	monkey.Patch(RunCheck, func(name string, from string) (result []string, err error) {
-		return []string{"Patched"}, nil
+	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {
+		return `mock message`, nil
 	})
 	monkey.Patch(Notify, func(message string) (err error) {
 		return errors.New(`error`)
 	})
-	defer monkey.Unpatch(RunCheck)
+	defer monkey.Unpatch(CheckRepay)
 	defer monkey.Unpatch(Notify)
 
 	err := RunChecks()
 	assert.NotNil(t, err)
+}
+func TestRunChecksFailOnCheckAmount(t *testing.T) {
+	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {
+		return "", nil
+	})
+	monkey.Patch(CheckAmount, func(string, float64, string, int) (string, error) {
+		return "", errors.New("mock")
+	})
+	defer monkey.Unpatch(CheckRepay)
+	defer monkey.Unpatch(CheckAmount)
+
+	err := RunChecks()
+	assert.NotNil(t, err)
+}
+
+func MockAPIEmptyResponder(req *http.Request) (*http.Response, error) {
+	resp, err := httpmock.NewJsonResponse(200, APIResponse{})
+	return resp, err
+}
+
+func MockAPIServerErrorReponder(req *http.Request) (*http.Response, error) {
+	return httpmock.NewStringResponse(503, "Server Error"), nil
+}
+func MockAPINonJsonReponder(req *http.Request) (*http.Response, error) {
+	return httpmock.NewStringResponse(200, "Server Error"), nil
+}
+
+func TestQueryBackend(t *testing.T) {
+	sample := APIResponse{[]APITransaction{Transactions[0]}}
+	test_data := []struct {
+		name          string
+		arg           map[string]string
+		expected      APIResponse
+		error_message string
+		handler       func(req *http.Request) (*http.Response, error)
+	}{
+		{"HappyPath", map[string]string{"id": "1"}, sample, "", MockedAPIResponder},
+		{"HappyPathEmpty", nil, APIResponse{}, "", MockAPIEmptyResponder},
+		{"ErrorNotOK", nil, APIResponse{}, `Get "https://api.mock/api/transactions": no responder found`, httpmock.ConnectionFailure},
+		{"ErrorNot200", nil, APIResponse{}, `server error`, MockAPIServerErrorReponder},
+		{"FailedScan", nil, APIResponse{}, `content type unsupported: `, MockAPINonJsonReponder},
+	}
+
+	for _, tt := range test_data {
+		t.Run(tt.name, func(t *testing.T) {
+			httpmock.Activate()
+			defer httpmock.DeactivateAndReset()
+			httpmock.RegisterResponder("GET", "=~^https://api.mock/api/", tt.handler)
+			result, err := QueryBackend(tt.arg)
+			if tt.error_message == "" {
+				assert.Nil(t, err)
+				assert.Equal(t, tt.expected, result)
+				return
+			}
+			assert.NotNil(t, err)
+			assert.Equal(t, tt.error_message, err.Error())
+		})
+	}
+
+}
+
+func Contains(s []int, e int64) bool {
+	for _, v := range s {
+		if v == int(e) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRunCheckAmount(t *testing.T) {
+	type A struct {
+		match     string
+		amount    float64
+		threshold string
+		days      int
+	}
+
+	type H map[string]string
+
+	monkey.Patch(time.Now, func() time.Time {
+		return time.Date(2000, time.January, 4, 0, 0, 0, 0, time.UTC)
+	})
+	defer monkey.UnpatchAll()
+
+	test_data := []struct {
+		name            string
+		args            A
+		expected        string
+		expected_params map[string]string
+		error_message   string
+		query_repsonse  []int
+	}{
+		{
+			"Negative",
+			A{"B", -50.0, "10%", 5},
+			"Unexpected amounts:\nMon 3 Jan Bill for $60.00 expecting $50.00",
+			H{"amount__lt": "-55.00", "created__gt": "1999-12-30T00:00:00", "description__like": "B"},
+			"",
+			[]int{4},
+		},
+		{
+			"Unmatched",
+			A{"B", -50.0, "10%", 5},
+			"",
+			H{"amount__lt": "-55.00", "created__gt": "1999-12-30T00:00:00", "description__like": "B"},
+			"",
+			[]int{},
+		},
+		{
+			"Positive",
+			A{"Sal", 1000, "100", 5},
+			"Unexpected amounts:\nMon 3 Jan Salary for $800.00 expecting $1000.00",
+			H{"amount__lt": "900.00", "created__gt": "1999-12-30T00:00:00", "description__like": "Sal"},
+			"",
+			[]int{5},
+		},
+		{
+			"Exact",
+			A{"X", 1000, "", 5},
+			"Unexpected amounts:\nMon 3 Jan Salary for $800.00 expecting $1000.00",
+			H{"amount__ne": "1000.00", "created__gt": "1999-12-30T00:00:00", "description__like": "X"},
+			"",
+			[]int{5},
+		},
+		{
+			"Err",
+			A{"X", 1000, "", 5},
+			"Unexpected amounts:\nMon 3 Jan Salary for $800.00 expecting $1000.00",
+			H{"amount__ne": "1000.00", "created__gt": "1999-12-30T00:00:00", "description__like": "X"},
+			"something",
+			[]int{5},
+		},
+	}
+
+	for _, td := range test_data {
+		t.Run(td.name, func(s *testing.T) {
+			var called map[string]string
+			monkey.Patch(QueryBackend, func(p map[string]string) (a APIResponse, err error) {
+				called = p
+				if td.error_message != "" {
+					err = errors.New(td.error_message)
+					return
+				}
+				for _, x := range Transactions {
+					if Contains(td.query_repsonse, x.Id) {
+						a.Data = append(a.Data, x)
+					}
+				}
+				return
+			})
+			defer monkey.Unpatch(QueryBackend)
+
+			result, err := CheckAmount(td.args.match, td.args.amount, td.args.threshold, td.args.days)
+			if td.error_message == "" {
+				assert.Nil(s, err)
+				assert.Equal(s, td.expected, result)
+				assert.Equal(s, td.expected_params, called)
+				return
+			}
+			assert.NotNil(s, err)
+			assert.Equal(s, td.error_message, err.Error())
+		})
+	}
+
+}
+
+func TestCheckRepay(t *testing.T) {
+	monkey.Patch(time.Now, func() time.Time {
+		return time.Date(2000, time.January, 4, 0, 0, 0, 0, time.UTC)
+	})
+	defer monkey.UnpatchAll()
+
+	type A struct {
+		match string
+		from  string
+		to    string
+		days  int
+	}
+
+	type E struct {
+		err_message string
+		calls       int
+	}
+
+	test_data := []struct {
+		name            string
+		args            A
+		expected        string
+		expected_params []map[string]string
+		err             *E
+	}{
+		{
+			"Empty",
+			A{"NOTFOUND", "NotFound", "NotFound", -3},
+			"",
+			[]map[string]string{{"amount__lt": "0.00", "created__gt": "2000-01-07T00:00:00", "description__like": "NOTFOUND"}},
+			nil,
+		},
+		{
+			"Matches",
+			A{"WOOLWORTHS", "Food", "Spending", 3},
+			"Move money from Food to Spending:\n$2.22 from Sun 2 Jan\n$3.33 from Mon 3 Jan",
+			[]map[string]string{
+				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
+				{"amount": "1.11", "created__gt": "2000-01-01T00:00:01", "description__like": "Food"},
+				{"amount": "2.22", "created__gt": "2000-01-02T00:00:01", "description__like": "Food"},
+				{"amount": "3.33", "created__gt": "2000-01-03T00:00:01", "description__like": "Food"},
+			},
+			nil,
+		},
+		{
+			"SingleMatch",
+			A{"WOOLWORTHS", "Food", "Spending", 1},
+			"Move money from Food to Spending:\n$3.33 from Mon 3 Jan",
+			[]map[string]string{
+				{"amount__lt": "0.00", "created__gt": "2000-01-03T00:00:00", "description__like": "WOOLWORTHS"},
+				{"amount": "3.33", "created__gt": "2000-01-03T00:00:01", "description__like": "Food"},
+			},
+			nil,
+		},
+		{
+			"ErrInitial",
+			A{"WOOLWORTHS", "Food", "Spending", 3},
+			"",
+			[]map[string]string{
+				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
+			},
+			&E{"Failure", 0},
+		},
+		{
+			"ErrSubsequent",
+			A{"WOOLWORTHS", "Food", "Spending", 3},
+			"",
+			[]map[string]string{
+				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
+				{"amount": "1.11", "created__gt": "2000-01-01T00:00:01", "description__like": "Food"},
+			},
+			&E{"Failure", 1},
+		},
+	}
+
+	for _, td := range test_data {
+		t.Run(td.name, func(s *testing.T) {
+			var called []map[string]string
+			monkey.Patch(QueryBackend, func(p map[string]string) (a APIResponse, err error) {
+				called = append(called, p)
+				if td.err != nil && len(called) > td.err.calls {
+					err = errors.New(td.err.err_message)
+					return a, err
+				}
+				a.Data = FilterTransactions(p)
+				return
+			})
+			defer monkey.Unpatch(QueryBackend)
+
+			result, err := CheckRepay(td.args.match, td.args.from, td.args.to, td.args.days)
+			if td.err == nil {
+				assert.Nil(s, err)
+				assert.Equal(s, td.expected, result)
+				assert.Equal(s, td.expected_params, called, "Incorrect QueryBackend params")
+				return
+			}
+			assert.NotNil(s, err)
+			assert.Equal(s, td.err.err_message, err.Error())
+			assert.Equal(s, td.expected_params, called, "Incorrect QueryBackend params")
+		})
+	}
+
 }

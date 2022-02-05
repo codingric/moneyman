@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,27 +48,43 @@ func main() {
 	RunChecks()
 }
 
-func RunChecks() error {
-	for name := range viper.GetStringMap("checks") {
-		from := viper.GetString("checks." + name + ".from")
-		to := viper.GetString("checks." + name + ".to")
-		outstanding, err := RunCheck(name, from)
-		if err != nil {
-			log.Printf("Error during check: %s", err.Error())
-			return err
-		}
+type ConfigChecks struct {
+	Checks []map[string]string `mapstructure:"checks"`
+}
 
-		if len(outstanding) > 0 {
-			message := fmt.Sprintf("Move money from %s to %s:", from, to)
-			for _, row := range outstanding {
-				message = fmt.Sprintf("%s\n%s", message, row)
+func RunChecks() error {
+	var checks []map[string]string
+	viper.UnmarshalKey("checks", &checks)
+	for _, check := range checks {
+		if viper.GetBool("verbose") {
+			log.Printf("Checking: %s (%s)", check["match"], check["type"])
+		}
+		days, _ := strconv.Atoi(check["days"])
+		message := string("")
+		switch check["type"] {
+		case "repay":
+			var err error
+			message, err = CheckRepay(check["match"], check["from"], check["to"], days)
+			if err != nil {
+				log.Printf("Error during check: %s", err.Error())
+				return err
 			}
-			err = Notify(message)
+		case "amount":
+			var e error
+			expected, _ := strconv.ParseFloat(check["expected"], 64)
+			message, e = CheckAmount(check["match"], expected, check["threshold"], days)
+			if e != nil {
+				return e
+			}
+		}
+		if message != "" {
+			err := Notify(message)
 			if err != nil {
 				log.Printf("Error during notify: %s", err.Error())
 				return err
 			}
 		}
+
 	}
 	return nil
 }
@@ -83,34 +101,85 @@ type APITransaction struct {
 	Created     time.Time `json:"created"`
 }
 
-func RunCheck(name string, from string) (result []string, err error) {
-	if viper.GetBool("verbose") {
-		log.Println("Checking:", name)
-	}
-	past := time.Now().AddDate(0, 0, -3)
-	params := map[string]string{
-		"description__like": name,
-		"created__gt":       past.Format("2006-01-02T15:04:05"),
-		"amount__lt":        "0",
-	}
-
+func QueryBackend(params map[string]string) (result APIResponse, err error) {
 	client := request.Client{
 		URL:    viper.GetString("backend"),
 		Query:  params,
 		Method: "GET",
 	}
 
-	var response APIResponse
+	check := client.Send()
 
-	check := client.Send() //.Scan(&response)
+	if !check.OK() {
+		err = check.Error()
+		return
+	}
 
 	if check.Response().StatusCode != 200 {
 		err = errors.New(strings.ToLower(check.String()))
 		return
 	}
 
-	if !check.Scan(&response).OK() {
+	if !check.Scan(&result).OK() {
 		err = check.Error()
+		return
+	}
+	return
+}
+
+func CheckAmount(match string, expected float64, threshold string, days int) (msg string, err error) {
+	past := time.Now().AddDate(0, 0, days*-1)
+	thresh := 0.0
+	params := map[string]string{
+		"description__like": match,
+		"created__gt":       past.Format("2006-01-02T15:04:05"),
+	}
+	if threshold == "" {
+		params["amount__ne"] = fmt.Sprintf("%0.2f", expected)
+	} else if strings.Contains(threshold, "%") {
+		t, _ := strconv.ParseFloat(strings.Replace(threshold, "%", "", 1), 64)
+		thresh = math.Abs(expected * (t / 100.0))
+		params["amount__lt"] = fmt.Sprintf("%0.2f", expected-thresh)
+
+	} else {
+		thresh, _ = strconv.ParseFloat(strings.Replace(threshold, "$", "", 1), 64)
+		params["amount__lt"] = fmt.Sprintf("%0.2f", expected-math.Abs(thresh))
+
+	}
+
+	response, err := QueryBackend(params)
+	if err != nil {
+		return
+	}
+
+	if len(response.Data) > 0 {
+		msg = "Unexpected amounts:"
+		for _, t := range response.Data {
+			msg = fmt.Sprintf(
+				"%s\n%s %s for $%0.2f expecting $%0.2f",
+				msg,
+				t.Created.Format("Mon 2 Jan"),
+				t.Description,
+				math.Abs(float64(t.Amount)),
+				math.Abs(expected),
+			)
+		}
+	}
+
+	return
+}
+
+func CheckRepay(match string, from string, to string, days int) (msg string, err error) {
+	past := time.Now().AddDate(0, 0, days*-1)
+	params := map[string]string{
+		"description__like": match,
+		"created__gt":       past.Format("2006-01-02T15:04:05"),
+		"amount__lt":        "0.00",
+	}
+	var result []string
+
+	response, err := QueryBackend(params)
+	if err != nil {
 		return
 	}
 
@@ -120,21 +189,10 @@ func RunCheck(name string, from string) (result []string, err error) {
 			"description__like": from,
 			"amount":            fmt.Sprintf("%0.2f", transaction.Amount*-1),
 		}
-		c := request.Client{
-			Method: "GET",
-			URL:    viper.GetString("backend"),
-			Query:  p,
-		}
-		var rr APIResponse
-		cc := c.Send()
-		if cc.Response().StatusCode != 200 {
-			err = errors.New(strings.ToLower(cc.String()))
-			return
-		}
 
-		if !cc.Scan(&rr).OK() {
-			err = cc.Error()
-			return
+		rr, err := QueryBackend(p)
+		if err != nil {
+			return msg, err
 		}
 
 		if len(rr.Data) == 0 {
@@ -148,7 +206,12 @@ func RunCheck(name string, from string) (result []string, err error) {
 		found := len(response.Data)
 		log.Printf("Transactions: %d/%d repaid", found-unpaid, found)
 	}
-
+	if len(result) > 0 {
+		msg = fmt.Sprintf("Move money from %s to %s:", from, to)
+		for _, row := range result {
+			msg = fmt.Sprintf("%s\n%s", msg, row)
+		}
+	}
 	return
 }
 
@@ -191,12 +254,10 @@ func Notify(message string) (err error) {
 			switch resp.Response().StatusCode {
 			case 401:
 				err = errors.New("authentication failure")
-				break
 			case 400:
 				var xml TwilioResponse
 				resp.ScanXML(&xml)
 				err = errors.New(xml.RestException.Message)
-				break
 			default:
 				err = errors.New("twilio responded with failure")
 			}

@@ -44,7 +44,7 @@ func setupServer(debug bool) *gin.Engine {
 	r.GET("/transactions", controllers.FindTransactions)
 	r.GET("/transactions/:id", controllers.FindTransaction)
 	r.POST("/transactions", controllers.CreateTransaction)
-	r.POST("/upload", controllers.Upload)
+	//r.POST("/upload", controllers.Upload)
 
 	return r
 }

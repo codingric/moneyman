@@ -7,4 +7,4 @@ WORKDIR /build
 COPY . .
 RUN go mod download
 
-CMD ["go", "test", "-v", "-cover"]
+CMD ["go", "test", "-v", "-cover", "controllers"]

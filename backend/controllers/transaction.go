@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"crypto/md5"
-	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
@@ -57,8 +56,13 @@ func FindTransactions(c *gin.Context) {
 			query = query.Where(field+" < ?", val)
 		case "le":
 			query = query.Where(field+" <= ?", val)
-		default:
+		case "eq":
 			query = query.Where(field+" = ?", val)
+		case "ne":
+			query = query.Where(field+" != ?", val)
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid operator %s", op)})
+			return
 		}
 	}
 	var transactions []models.Transaction
@@ -115,51 +119,51 @@ func CreateTransaction(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": transaction})
 }
 
-func Upload(c *gin.Context) {
-	file, _, err := c.Request.FormFile("csv")
-	if err != nil {
-		c.String(http.StatusBadRequest, "get form err: %s", err.Error())
-		return
-	}
+// func Upload(c *gin.Context) {
+// 	file, _, err := c.Request.FormFile("csv")
+// 	if err != nil {
+// 		c.String(http.StatusBadRequest, "get form err: %s", err.Error())
+// 		return
+// 	}
 
-	reader := csv.NewReader(file)
-	records, _ := reader.ReadAll()
+// 	reader := csv.NewReader(file)
+// 	records, _ := reader.ReadAll()
 
-	hashes := []string{}
+// 	hashes := []string{}
 
-	imported := 0
-	skipped := []gin.H{}
+// 	imported := 0
+// 	skipped := []gin.H{}
 
-	for index, row := range records {
+// 	for index, row := range records {
 
-		if row[0] == "Date" {
-			continue
-		}
+// 		if row[0] == "Date" {
+// 			continue
+// 		}
 
-		created, _ := time.Parse("02/01/2006", row[0])
+// 		created, _ := time.Parse("02/01/2006", row[0])
 
-		amount := row[3]
-		if row[3] == "" {
-			amount = row[4]
-		}
+// 		amount := row[3]
+// 		if row[3] == "" {
+// 			amount = row[4]
+// 		}
 
-		b := []string{fmt.Sprint(created.Unix()), row[1], amount, row[2]}
-		d := strings.Join(b, "!")
-		h := md5.Sum([]byte(d))
+// 		b := []string{fmt.Sprint(created.Unix()), row[1], amount, row[2]}
+// 		d := strings.Join(b, "!")
+// 		h := md5.Sum([]byte(d))
 
-		hashes = append(hashes, fmt.Sprintf("%x", h))
-		// Create transaction
-		f, _ := strconv.ParseFloat(amount, 64)
-		a, _ := strconv.ParseInt(row[1], 10, 64)
-		transaction := models.Transaction{Md5: fmt.Sprintf("%x", h), Created: created, Amount: f, Description: row[2], Account: a}
-		result := models.DB.Debug().Create(&transaction)
+// 		hashes = append(hashes, fmt.Sprintf("%x", h))
+// 		// Create transaction
+// 		f, _ := strconv.ParseFloat(amount, 64)
+// 		a, _ := strconv.ParseInt(row[1], 10, 64)
+// 		transaction := models.Transaction{Md5: fmt.Sprintf("%x", h), Created: created, Amount: f, Description: row[2], Account: a}
+// 		result := models.DB.Debug().Create(&transaction)
 
-		if result.Error != nil {
-			skipped = append(skipped, gin.H{"index": index, "error": fmt.Sprint(result.Error)})
-			continue
-		}
-		imported += 1
-	}
-	c.JSON(http.StatusOK, gin.H{"result": gin.H{"imported": imported, "skipped": len(skipped), "errors": skipped}})
-	return
-}
+// 		if result.Error != nil {
+// 			skipped = append(skipped, gin.H{"index": index, "error": fmt.Sprint(result.Error)})
+// 			continue
+// 		}
+// 		imported += 1
+// 	}
+// 	c.JSON(http.StatusOK, gin.H{"result": gin.H{"imported": imported, "skipped": len(skipped), "errors": skipped}})
+// 	return
+// }

@@ -54,8 +54,7 @@ func GetParams(target string) map[string]string {
 	return matches
 }
 
-func SetUpConfig() {
-	var config = []byte(`
+var config = []byte(`
 checks:
   - type: repay
     days: 3
@@ -72,6 +71,8 @@ notify:
   token: mocktoken
   mobiles:
     - +61412345678`)
+
+func SetUpConfig() {
 
 	viper.SetConfigType("yaml") // or viper.SetConfigType("YAML")
 
@@ -231,6 +232,20 @@ func TestRunChecksFailOnNotify(t *testing.T) {
 
 	err := RunChecks()
 	assert.NotNil(t, err)
+}
+
+func TestRunChecksInvalidType(t *testing.T) {
+	viper.ReadConfig(bytes.NewBuffer([]byte(`checks:
+  - type: invalid`)))
+
+	fix_config := func() {
+		viper.ReadConfig(bytes.NewBuffer(config))
+	}
+	defer fix_config()
+
+	err := RunChecks()
+	assert.NotNil(t, err)
+	assert.Equal(t, "Invalid check type: invalid", err.Error())
 }
 func TestRunChecksFailOnCheckAmount(t *testing.T) {
 	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {

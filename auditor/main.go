@@ -66,7 +66,6 @@ func RunChecks() error {
 			var err error
 			message, err = CheckRepay(check["match"], check["from"], check["to"], days)
 			if err != nil {
-				log.Printf("Error during check: %s", err.Error())
 				return err
 			}
 		case "amount":
@@ -76,11 +75,13 @@ func RunChecks() error {
 			if e != nil {
 				return e
 			}
+		default:
+			return errors.New("Invalid check type: " + check["type"])
 		}
 		if message != "" {
 			err := Notify(message)
 			if err != nil {
-				log.Printf("Error during notify: %s", err.Error())
+				log.Printf("Notify error: %s", err.Error())
 				return err
 			}
 		}

@@ -4,29 +4,31 @@ import (
 	"fmt"
 	"log"
 
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
-)
-
-var (
-	config_path = kingpin.Flag("config", "config.yaml").Default("config.yaml").Short('c').ExistingFile()
-	verbose     = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
+	"github.com/spf13/viper"
 )
 
 func main() {
 
-	kingpin.Parse()
-
+	LoadConfig()
 	var bills BigBills
-	config := LoadConfig(*config_path)
-	bills.Hydrate(config)
-	checkLate(bills, config)
+
+	if err := bills.Hydrate(); err != nil {
+		log.Fatalf("Failure: %s", err.Error())
+	}
+
+	if err := CheckLate(bills); err != nil {
+		log.Fatalf("Failure: %s", err.Error())
+	}
 }
 
-func checkLate(b BigBills, c AppConfig) {
-	late := b.GetLate()
+func CheckLate(b BigBills) error {
+	late, err := b.GetLate()
+	if err != nil {
+		return err
+	}
 
 	if len(late) > 0 {
-		if *verbose {
+		if viper.GetBool("verbose") {
 			log.Printf("%d overdue BigBills detected.\n", len(late))
 		}
 		message := "Need to move BigBills:"
@@ -34,13 +36,14 @@ func checkLate(b BigBills, c AppConfig) {
 			message = fmt.Sprintf("%s\n%s from %s ago", message, detail.Amount, detail.Days)
 		}
 		log.Print(message)
-		_, err := Notify(message, c)
+		_, err := Notify(message)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	} else {
-		if *verbose {
+		if viper.GetBool("verbose") {
 			log.Println("No overdue BigBills detected.")
 		}
 	}
+	return nil
 }

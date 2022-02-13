@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/viper"
 	"google.golang.org/api/option"
-	sheets "google.golang.org/api/sheets/v4"
+	"google.golang.org/api/sheets/v4"
 )
 
 type BigBillDate struct {
@@ -28,26 +29,36 @@ type LateBigBill struct {
 	Days   string `json:"days"`
 }
 
-func (b *BigBills) Hydrate(config AppConfig) {
+func GetBigBillsRange() (*sheets.ValueRange, error) {
 	ctx := context.Background()
-
-	srv, err := sheets.NewService(ctx, option.WithCredentialsJSON([]byte(config.Credentials)), option.WithScopes(sheets.SpreadsheetsScope))
+	srv, err := sheets.NewService(
+		ctx,
+		option.WithCredentialsJSON(
+			[]byte(viper.GetString("credentials")),
+		),
+		option.WithScopes(sheets.SpreadsheetsScope),
+	)
 
 	if err != nil {
-		log.Fatalf("Unable to retrieve Sheets client: %v", err)
+		log.Printf("Sheets client error: %v", err)
+		return nil, err
 	}
 
-	// Prints the names and majors of students in a sample spreadsheet:
-	// https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
-	spreadsheetId := config.SpreadsheetId
-	readRange := config.SpreadsheetRange
-	resp, err := srv.Spreadsheets.Values.Get(spreadsheetId, readRange).Do()
+	spreadsheetId := viper.GetString("spreadsheet_id")
+	readRange := viper.GetString("spreadsheet_range")
+	r, e := srv.Spreadsheets.Values.Get(spreadsheetId, readRange).Do()
+	return r, e
+}
+
+func (b *BigBills) Hydrate() error {
+
+	resp, err := GetBigBillsRange()
 	if err != nil {
-		log.Fatalf("Unable to retrieve data from sheet: %v", err)
+		return err
 	}
 
 	if len(resp.Values) == 0 {
-		if *verbose {
+		if viper.GetBool("verbose") {
 			log.Printf("No data loaded from spreadsheet")
 		}
 	} else {
@@ -59,29 +70,33 @@ func (b *BigBills) Hydrate(config AppConfig) {
 				b.Dates = append(b.Dates, BigBillDate{strings.Trim(row[0].(string), " "), row[1].(string), ""})
 			}
 		}
-		if *verbose {
+		if viper.GetBool("verbose") {
 			log.Printf("%d rows loaded from spreadsheet", len(resp.Values))
 		}
 	}
+	return nil
 }
 
-func (b *BigBills) GetLate() (result []LateBigBill) {
+func (b *BigBills) GetLate() (result []LateBigBill, err error) {
 	t := time.Now()
 	for _, date := range b.Dates {
 		p, err := time.Parse("2006-01-02", date.Date)
 		if err != nil {
+			// Issue parsing the date, log and skip
 			log.Println(err)
 			continue
 		}
 		if date.Paid != "" {
+			// Already paid, skip!
 			continue
 		}
 		if p.After(t) {
+			// Future payments, we can stop now
 			break
 		}
-		//log.Printf("%v %v\n", p.Format("02 Jan 06"), t.Sub(p))
+		// If we are here this payment is late
 		days := fmt.Sprintf("%d days", int(math.Round(t.Sub(p).Hours()/24)))
 		result = append(result, LateBigBill{p.Format("02 Jan 06"), date.Amount, days})
 	}
-	return result
+	return result, err
 }

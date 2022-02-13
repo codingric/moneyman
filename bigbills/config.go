@@ -1,27 +1,39 @@
 package main
 
 import (
-	"io/ioutil"
+	"flag"
 	"log"
 
-	"gopkg.in/yaml.v2"
+	"path/filepath"
+
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
-type AppConfig struct {
-	Sid              string   `yaml:"sid"`
-	Token            string   `yaml:"token"`
-	Mobiles          []string `yaml:"mobiles"`
-	Credentials      string   `yaml:"credentials"`
-	SpreadsheetId    string   `yaml:"spreadsheet_id"`
-	SpreadsheetRange string   `yaml:"spreadsheet_range"`
-}
+func LoadConfig() {
+	flag.Bool("v", false, "Verbose")
+	flag.String("c", "config.yaml", "Config.yaml")
 
-func LoadConfig(path string) AppConfig {
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		log.Fatal(err)
+	viper.RegisterAlias("verbose", "v")
+	viper.RegisterAlias("config", "c")
+
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+	pflag.Parse()
+	viper.BindPFlags(pflag.CommandLine)
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(filepath.Dir(viper.GetString("config")))
+	viper.AddConfigPath("/etc/bigbills/")
+	err := viper.ReadInConfig() // Find and read the config file
+	if err != nil {             // Handle errors reading the config file
+		log.Fatalf("%v\n", err)
 	}
-	m := AppConfig{}
-	yaml.Unmarshal(data, &m)
-	return m
+
+	if viper.GetBool("verbose") {
+		log.Println("Verbose: ON")
+		log.Printf("Config: `%s`\n", viper.ConfigFileUsed())
+	} else {
+		log.Println("Verbose: OFF")
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -54,8 +55,7 @@ func GetParams(target string) map[string]string {
 	return matches
 }
 
-var config = []byte(`
-checks:
+var config = []byte(`checks:
   - type: repay
     days: 3
     match: WOOLWORTHS
@@ -193,72 +193,169 @@ func TestNotifyFailOnAuth(t *testing.T) {
 }
 
 func TestRunChecks(t *testing.T) {
-	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {
-		return `mock message`, nil
-	})
-	monkey.Patch(Notify, func(message string) (err error) {
-		return nil
-	})
-	monkey.Patch(CheckAmount, func(string, float64, string, int) (string, error) {
-		return "", nil
-	})
-	defer monkey.Unpatch(CheckRepay)
-	defer monkey.Unpatch(CheckAmount)
-	defer monkey.Unpatch(Notify)
-
-	err := RunChecks()
-	assert.Nil(t, err)
-}
-
-func TestRunChecksFailOnCheckRepay(t *testing.T) {
-	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {
-		return ``, errors.New("Failure")
-	})
-	defer monkey.Unpatch(CheckRepay)
-	viper.Set("verbose", true)
-
-	err := RunChecks()
-	assert.NotNil(t, err)
-}
-func TestRunChecksFailOnNotify(t *testing.T) {
-	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {
-		return `mock message`, nil
-	})
-	monkey.Patch(Notify, func(message string) (err error) {
-		return errors.New(`error`)
-	})
-	defer monkey.Unpatch(CheckRepay)
-	defer monkey.Unpatch(Notify)
-
-	err := RunChecks()
-	assert.NotNil(t, err)
-}
-
-func TestRunChecksInvalidType(t *testing.T) {
-	viper.ReadConfig(bytes.NewBuffer([]byte(`checks:
-  - type: invalid`)))
-
-	fix_config := func() {
-		viper.ReadConfig(bytes.NewBuffer(config))
+	type CRP struct {
+		match string
+		from  string
+		to    string
+		days  int
 	}
-	defer fix_config()
+	type CRR struct {
+		msg string
+		err error
+	}
+	type NP struct{ message string }
+	type NR struct{ err error }
+	type CAP struct {
+		match     string
+		expected  float64
+		threshold string
+		days      int
+	}
+	type CAR struct {
+		msg string
+		err error
+	}
 
-	err := RunChecks()
-	assert.NotNil(t, err)
-	assert.Equal(t, "Invalid check type: invalid", err.Error())
-}
-func TestRunChecksFailOnCheckAmount(t *testing.T) {
-	monkey.Patch(CheckRepay, func(string, string, string, int) (string, error) {
-		return "", nil
-	})
-	monkey.Patch(CheckAmount, func(string, float64, string, int) (string, error) {
-		return "", errors.New("mock")
-	})
-	defer monkey.Unpatch(CheckRepay)
-	defer monkey.Unpatch(CheckAmount)
+	configs := map[string]string{"empty": "", "replay": `checks:
+  - type: repay
+    days: 3
+    match: WOOLWORTHS
+    from: Food
+    to: Spending`, "amount": `checks:
+  - type: amount
+    expected: 65.00
+    threshold: 20%
+    match: pineapple
+    days: 3`, "invalid": `checks:
+  - type: invalid`}
 
-	err := RunChecks()
-	assert.NotNil(t, err)
+	S := func(v string) *string { return &v }
+
+	tests := []struct {
+		name   string
+		config string
+		err    *string
+		crp    *CRP
+		crr    *CRR
+		cap    *CAP
+		car    *CAR
+		np     *NP
+		nr     *NR
+		crc    int
+		cac    int
+		nc     int
+	}{
+		{
+			name:   "EmptyConfig",
+			config: configs["empty"],
+		},
+		{
+			name:   "ReplaySuccess",
+			config: configs["replay"],
+			crp:    &CRP{"WOOLWORTHS", "Food", "Spending", 3},
+			crr:    &CRR{"CheckReplay", nil},
+			np:     &NP{"CheckReplay"},
+			crc:    1, nc: 1,
+		},
+		{
+			name:   "ReplayFailure",
+			config: configs["replay"],
+			crr:    &CRR{"", errors.New("CheckReplay")},
+			crc:    1,
+			err:    S("CheckReplay"),
+		},
+		{
+			name:   "AmountSuccess",
+			config: configs["amount"],
+			cap:    &CAP{"pineapple", 65.00, "20%", 3},
+			cac:    1,
+		},
+		{
+			name:   "AmountFailure",
+			config: configs["amount"],
+			car:    &CAR{"", errors.New("AmountFailure")},
+			err:    S("AmountFailure"),
+			cac:    1,
+		},
+		{
+			name:   "Invalid",
+			config: configs["invalid"],
+			err:    S("Invalid check type: invalid"),
+		},
+		{
+			name:   "NotifyFailure",
+			config: configs["replay"],
+			crr:    &CRR{"CheckReplay", nil},
+			nr:     &NR{errors.New("NotifyFailure")},
+			err:    S("NotifyFailure"),
+			crc:    1, nc: 1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(st *testing.T) {
+			var (
+				checkreplay_called int
+				notify_called      int
+				checkamount_called int
+			)
+
+			viper.ReadConfig(bytes.NewBuffer([]byte(test.config)))
+
+			monkey.Patch(CheckRepay, func(match string, from string, to string, days int) (msg string, err error) {
+				checkreplay_called++
+				if test.crp != nil {
+					params := CRP{match, from, to, days}
+					assert.Equal(st, *test.crp, params, "CheckRepay params")
+				}
+				if test.crr != nil {
+					msg = test.crr.msg
+					err = test.crr.err
+				}
+				return
+			})
+			monkey.Patch(Notify, func(message string) (err error) {
+				notify_called++
+				if test.np != nil {
+					params := NP{message}
+					assert.Equal(st, *test.np, params, "Notify params")
+				}
+
+				if test.nr != nil {
+					err = test.nr.err
+				}
+				return
+			})
+			monkey.Patch(CheckAmount, func(match string, expected float64, threshold string, days int) (msg string, err error) {
+				checkamount_called++
+				if test.cap != nil {
+					params := CAP{match, expected, threshold, days}
+					assert.Equal(st, *test.cap, params, "CheckAmount params")
+				}
+				if test.car != nil {
+					msg = test.car.msg
+					err = test.car.err
+				}
+				return
+			})
+			defer monkey.Unpatch(CheckRepay)
+			defer monkey.Unpatch(CheckAmount)
+			defer monkey.Unpatch(Notify)
+			err := RunChecks()
+
+			if test.err == nil {
+				assert.Nil(st, err)
+			} else {
+				assert.NotNil(st, err)
+				if err != nil {
+					assert.Equal(st, *test.err, err.Error())
+				}
+			}
+			assert.Equal(st, test.crc, checkreplay_called, "checkreplay_called")
+			assert.Equal(st, test.cac, checkamount_called, "checkamount_called")
+			assert.Equal(st, test.nc, notify_called, "notify_called")
+		})
+	}
 }
 
 func MockAPIEmptyResponder(req *http.Request) (*http.Response, error) {
@@ -284,16 +381,23 @@ func TestQueryBackend(t *testing.T) {
 	}{
 		{"HappyPath", map[string]string{"id": "1"}, sample, "", MockedAPIResponder},
 		{"HappyPathEmpty", nil, APIResponse{}, "", MockAPIEmptyResponder},
-		{"ErrorNotOK", nil, APIResponse{}, `Get "https://api.mock/api/transactions": no responder found`, httpmock.ConnectionFailure},
+		{"ErrorNotOK", nil, APIResponse{}, `no responder found`, httpmock.ConnectionFailure},
 		{"ErrorNot200", nil, APIResponse{}, `server error`, MockAPIServerErrorReponder},
 		{"FailedScan", nil, APIResponse{}, `content type unsupported: `, MockAPINonJsonReponder},
 	}
 
 	for _, tt := range test_data {
 		t.Run(tt.name, func(t *testing.T) {
-			httpmock.Activate()
-			defer httpmock.DeactivateAndReset()
-			httpmock.RegisterResponder("GET", "=~^https://api.mock/api/", tt.handler)
+
+			monkey.PatchInstanceMethod(
+				reflect.TypeOf(http.DefaultClient),
+				"Do",
+				func(c *http.Client, req *http.Request) (*http.Response, error) {
+					resp, err := tt.handler(req)
+					return resp, err
+				})
+			defer monkey.UnpatchInstanceMethod(reflect.TypeOf(http.DefaultClient), "Do")
+
 			result, err := QueryBackend(tt.arg)
 			if tt.error_message == "" {
 				assert.Nil(t, err)
@@ -304,7 +408,6 @@ func TestQueryBackend(t *testing.T) {
 			assert.Equal(t, tt.error_message, err.Error())
 		})
 	}
-
 }
 
 func Contains(s []int, e int64) bool {
@@ -410,7 +513,6 @@ func TestRunCheckAmount(t *testing.T) {
 			assert.Equal(s, td.error_message, err.Error())
 		})
 	}
-
 }
 
 func TestCheckRepay(t *testing.T) {
@@ -514,5 +616,4 @@ func TestCheckRepay(t *testing.T) {
 			assert.Equal(s, td.expected_params, called, "Incorrect QueryBackend params")
 		})
 	}
-
 }

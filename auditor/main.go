@@ -45,7 +45,10 @@ func LoadConf() {
 
 func main() {
 	LoadConf()
-	RunChecks()
+
+	if err := RunChecks(); err != nil {
+		log.Fatalf("Failure: %s", err.Error())
+	}
 }
 
 type ConfigChecks struct {
@@ -251,23 +254,22 @@ func Notify(message string) (err error) {
 		}
 		resp := client.Send()
 
-		if resp.Response().StatusCode != 200 {
-			switch resp.Response().StatusCode {
-			case 401:
-				err = errors.New("authentication failure")
-			case 400:
-				var xml TwilioResponse
-				resp.ScanXML(&xml)
-				err = errors.New(xml.RestException.Message)
-			default:
-				err = errors.New("twilio responded with failure")
+		switch resp.Response().StatusCode {
+		case 201:
+			if viper.GetBool("verbose") {
+				log.Println("Sent SMS Successfully")
 			}
-			return err
+			continue
+		case 401:
+			err = errors.New("authentication failure")
+		case 400:
+			var xml TwilioResponse
+			resp.ScanXML(&xml)
+			err = errors.New(xml.RestException.Message)
+		default:
+			err = errors.New("twilio responded with failure")
 		}
-
-		if viper.GetBool("verbose") {
-			log.Println("Sent SMS Successfully")
-		}
+		return err
 	}
 	return nil
 }

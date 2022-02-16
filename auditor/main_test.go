@@ -153,7 +153,7 @@ func SetMockTwilio() {
 				resp := httpmock.NewStringResponse(400, `<TwilioResponse><RestException><Code>30000</Code><Detail></Detail><Message>Fake Error</Message><MoreInfo>fake.com</MoreInfo><Status>400</Status></RestException></TwilioResponse>`)
 				return resp, nil
 			}
-			resp := httpmock.NewStringResponse(200, success_resp)
+			resp := httpmock.NewStringResponse(201, success_resp)
 			return resp, nil
 		})
 }

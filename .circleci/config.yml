@@ -108,7 +108,7 @@ workflows:
       - build-docker:
           pipe_name: mailparser
       - deploy:
-          pipe_name: auditor
+          pipe_name: mailparser
           requires:
             - build-docker
           context: k3s
@@ -118,7 +118,7 @@ workflows:
       - build-docker:
           pipe_name: backend
       - deploy:
-          pipe_name: auditor
+          pipe_name: backend
           requires:
             - build-docker
           context: k3s
@@ -128,7 +128,7 @@ workflows:
       - build-docker:
           pipe_name: bigbills
       - deploy:
-          pipe_name: auditor
+          pipe_name: bigbills
           requires:
             - build-docker
           context: k3s

@@ -16,7 +16,7 @@ LABEL org.opencontainers.image.source https://github.com/codingric/moneyman
 RUN apk add tzdata \
     && echo "Australia/Melbourne" >  /etc/timezone
 
-ENTRYPOINT [ "/usr/bin/mailparser" ]
+ENTRYPOINT [ "/usr/local/bin/mailparser" ]
 
-COPY --from=build /build/mailparser /usr/bin/
+COPY --from=build /build/mailparser /usr/local/bin/
 

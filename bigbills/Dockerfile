@@ -1,7 +1,3 @@
-##
-# checkov:skip=CKV_DOCKER_2:Build stage image
-# checkov:skip=CKV_DOCKER_3:Build stage image
-
 FROM golang:alpine AS build
 
 WORKDIR /build

@@ -1,0 +1,6 @@
+resources:
+  - mailparser.yaml
+namespace: default
+images:
+  - name: ghcr.io/codingric/moneyman/mailparser
+    newTag: ${GIT_SHA}

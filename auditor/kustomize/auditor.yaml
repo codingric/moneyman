@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: moneyman-auditor
+spec:
+  schedule: "00 9,23 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: auditor
+              image: ghcr.io/codingric/moneyman/auditor
+              env:
+                - name: TZ
+                  value: "Australia/Melbourne"
+              args:
+                - "-v"
+              imagePullPolicy: Always
+              volumeMounts:
+                - mountPath: "/etc/auditor"
+                  name: auditor
+                  readOnly: true
+          volumes:
+            - name: auditor
+              secret:
+                secretName: moneyman-auditor
+          restartPolicy: Never

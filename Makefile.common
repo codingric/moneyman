@@ -1,4 +1,5 @@
 IMAGE_NAME ?= $(shell basename $$(pwd))
+GIT_SHA = $(shell git rev-parse --short HEAD)
 
 package-common:
 	docker buildx build \
@@ -6,9 +7,15 @@ package-common:
 		--cache-to=type=local,dest=/tmp/cache \
 		--platform linux/arm64 \
 		-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):latest \
+		-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):$(GIT_SHA) \
 		--progress plain \
 		--push \
 		.
+
+kustomize-common:
+	@mv kustomize/kustomization.yaml kustomize/_kustomization.yaml; \
+	GIT_SHA=$(GIT_SHA) envsubst < kustomize/_kustomization.yaml > kustomize/kustomization.yaml; \
+	kustomize build --enable-alpha-plugins kustomize | kubectl apply -f -
 
 test-common:
 	docker-compose run test

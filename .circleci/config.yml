@@ -30,6 +30,7 @@ jobs:
         default: ""
     docker:
       - image: cimg/base:stable
+    resource_class: medium
     steps:
       - checkout
       - setup_remote_docker
@@ -59,6 +60,24 @@ jobs:
           key: << parameters.pipe_name >>-v1
           paths:
             - /tmp/cache
+  deploy:
+    parameters:
+      pipe_name:
+        type: string
+        default: ""
+    docker:
+      - image: ghcr.io/codingric/kksops
+        entrypoint: /entrypoint.sh
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Load keys and kube config
+          command: helper.sh
+      - run:
+          working_directory: << parameters.pipe_name >>
+          name: Kustomize
+          command: make kustomize
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/2.0/configuration-reference/#workflows
@@ -88,18 +107,38 @@ workflows:
     jobs:
       - build-docker:
           pipe_name: mailparser
+      - deploy:
+          pipe_name: auditor
+          requires:
+            - build-docker
+          context: k3s
   build-backend:
     when: "<< pipeline.parameters.backend >>"
     jobs:
       - build-docker:
           pipe_name: backend
+      - deploy:
+          pipe_name: auditor
+          requires:
+            - build-docker
+          context: k3s
   build-bigbills:
     when: "<< pipeline.parameters.bigbills >>"
     jobs:
       - build-docker:
           pipe_name: bigbills
+      - deploy:
+          pipe_name: auditor
+          requires:
+            - build-docker
+          context: k3s
   build-auditor:
     when: "<< pipeline.parameters.auditor >>"
     jobs:
       - build-docker:
           pipe_name: auditor
+      - deploy:
+          pipe_name: auditor
+          requires:
+            - build-docker
+          context: k3s

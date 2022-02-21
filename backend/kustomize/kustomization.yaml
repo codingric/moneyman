@@ -1,0 +1,6 @@
+resources:
+  - backend.yaml
+namespace: default
+images:
+  - name: ghcr.io/codingric/moneyman/backend
+    newTag: ${GIT_SHA}

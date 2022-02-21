@@ -1,0 +1,8 @@
+resources:
+  - bigbills.yaml
+namespace: default
+images:
+  - name: ghcr.io/codingric/moneyman/bigbills
+    newTag: ${GIT_SHA}
+generators:
+  - secret-generator.yaml

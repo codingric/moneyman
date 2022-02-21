@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: moneyman-bigbills
+spec:
+  schedule: "00 23 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: bigbills
+              image: ghcr.io/codingric/moneyman/bigbills
+              env:
+                - name: TZ
+                  value: "Australia/Melbourne"
+              args:
+                - "-c"
+                - "/etc/bigbills/config.yaml"
+                - "-v"
+              imagePullPolicy: Always
+              volumeMounts:
+                - mountPath: "/etc/bigbills"
+                  name: bigbills
+                  readOnly: true
+          volumes:
+            - name: bigbills
+              secret:
+                secretName: moneyman-bigbills
+          restartPolicy: Never

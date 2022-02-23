@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/ioutil"
+	"net/http"
 	"reflect"
 	"testing"
 	"time"
@@ -21,6 +23,8 @@ sid: 00000000000
 token: 00000000000
 spreadsheet_id: testspreadsheetid
 spreadsheet_range: "Big Bills!M2:P"
+account_id: "000000"
+backend: https://fake.com/api/transactions
 mobiles:
   - "+6140000000"
 credentials: |
@@ -42,7 +46,7 @@ func LoadTestConfig() {
 	viper.SetConfigType("yaml")
 	viper.ReadConfig(bytes.NewBuffer(test_config_yaml))
 	viper.Set("verbose", true)
-	viper.Debug()
+	//viper.Debug()
 }
 
 // func TestMain(m *testing.M) {
@@ -52,6 +56,8 @@ func LoadTestConfig() {
 // }
 
 func TestBigBillsHydrate(t *testing.T) {
+	past := time.Date(2000, time.January, 2, 0, 0, 0, 0, time.UTC)
+	recent := time.Date(2000, time.January, 3, 0, 0, 0, 0, time.UTC)
 	type P struct {
 		result *sheets.ValueRange
 		err    error
@@ -77,13 +83,13 @@ func TestBigBillsHydrate(t *testing.T) {
 		},
 		{
 			"Unpaid",
-			P{&sheets.ValueRange{Values: [][]interface{}{{"1 Jan 2022", "100.00", "-100.00"}}}, nil},
-			E{BigBills{[]BigBillDate{{"1 Jan 2022", "100.00", ""}}}, ""},
+			P{&sheets.ValueRange{Values: [][]interface{}{{"2000-01-02", "100.00", "-100.00"}}}, nil},
+			E{BigBills{[]BigBillDate{{past, 100.00, nil, 0}}}, ""},
 		},
 		{
 			"Paid",
-			P{&sheets.ValueRange{Values: [][]interface{}{{"1 Jan 2022", "100.00", "-100.00", "1 Jan 2022"}}}, nil},
-			E{BigBills{[]BigBillDate{{"1 Jan 2022", "100.00", "1 Jan 2022"}}}, ""},
+			P{&sheets.ValueRange{Values: [][]interface{}{{"2000-01-02", "100.00", "-100.00", "2000-01-03"}}}, nil},
+			E{BigBills{[]BigBillDate{{past, 100.00, &recent, 0}}}, ""},
 		},
 	}
 
@@ -108,8 +114,16 @@ func TestBigBillsHydrate(t *testing.T) {
 }
 
 func TestBigBillsGetLate(t *testing.T) {
+	past := time.Date(2000, time.January, 2, 0, 0, 0, 0, time.UTC)
+	recent := time.Date(2000, time.January, 3, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2000, time.January, 4, 0, 0, 0, 0, time.UTC)
+	future := time.Date(2000, time.January, 10, 0, 0, 0, 0, time.UTC)
 	monkey.Patch(time.Now, func() time.Time {
-		return time.Date(2000, time.January, 4, 0, 0, 0, 0, time.UTC)
+		return now
+	})
+	var b *BigBillDate
+	monkey.PatchInstanceMethod(reflect.TypeOf(b), "CheckRepayments", func(*BigBillDate) (paid bool, err error) {
+		return false, nil
 	})
 	defer monkey.UnpatchAll()
 	type E struct {
@@ -127,24 +141,19 @@ func TestBigBillsGetLate(t *testing.T) {
 			E{},
 		},
 		{
-			"InvalidDate",
-			BigBills{[]BigBillDate{{"xxx", "", ""}}},
-			E{},
-		},
-		{
 			"Paid",
-			BigBills{[]BigBillDate{{"2000-01-02", "", "2000-01-03"}}},
+			BigBills{[]BigBillDate{{past, 0, &recent, 0}}},
 			E{},
 		},
 		{
 			"Future",
-			BigBills{[]BigBillDate{{"2000-01-10", "", ""}}},
+			BigBills{[]BigBillDate{{future, 0, nil, 0}}},
 			E{},
 		},
 		{
 			"Unpaid",
-			BigBills{[]BigBillDate{{"2000-01-02", "", ""}}},
-			E{[]LateBigBill{{Date: "02 Jan 00", Amount: "", Days: "2 days"}}, ""},
+			BigBills{[]BigBillDate{{past, 0, nil, 0}}},
+			E{[]LateBigBill{{Date: past, Amount: 0, Days: 2}}, ""},
 		},
 	}
 	for _, test := range tests {
@@ -222,4 +231,56 @@ func TestGetBigBillsRange(t *testing.T) {
 		})
 	}
 
+}
+
+func TestBigBillsDateUpdatePaid(t *testing.T) {
+	LoadTestConfig()
+	n := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	b := BigBillDate{}
+
+	var x *sheets.SpreadsheetsValuesUpdateCall
+
+	monkey.PatchInstanceMethod(reflect.TypeOf(x), "ValueInputOption", func(s *sheets.SpreadsheetsValuesUpdateCall, valueInputOption string) *sheets.SpreadsheetsValuesUpdateCall {
+		return s
+	})
+	monkey.PatchInstanceMethod(reflect.TypeOf(x), "Do", func(s *sheets.SpreadsheetsValuesUpdateCall, opts ...googleapi.CallOption) (*sheets.UpdateValuesResponse, error) {
+		return nil, nil
+	})
+
+	expected := sheets.ValueRange{MajorDimension: "", Range: "", Values: [][]interface{}{{"01/01/2000"}}}
+	srv, _ := sheets.NewService(context.Background())
+	obj := sheets.NewSpreadsheetsValuesService(srv)
+	monkey.PatchInstanceMethod(reflect.TypeOf(obj), "Update", func(s *sheets.SpreadsheetsValuesService, spreadsheetId string, range_ string, valuerange *sheets.ValueRange) (o *sheets.SpreadsheetsValuesUpdateCall) {
+		assert.Equal(t, "testspreadsheetid", spreadsheetId)
+		assert.Equal(t, "Big Bills!P2", range_)
+		assert.Equal(t, &expected, valuerange)
+		return &sheets.SpreadsheetsValuesUpdateCall{}
+	})
+	defer monkey.UnpatchInstanceMethod(reflect.TypeOf(obj), "Update")
+
+	b.UpdatePaid(n)
+}
+
+func TestBigBillsDateCheckRepayments(t *testing.T) {
+	LoadTestConfig()
+	n := time.Date(2000, 1, 1, 0, 0, 0, 0, time.Local)
+	p := time.Date(2000, 1, 2, 0, 0, 0, 0, time.Local)
+
+	b := BigBillDate{Date: n, Amount: 100}
+	var x *BigBillDate
+	update_called := false
+	monkey.PatchInstanceMethod(reflect.TypeOf(x), "UpdatePaid", func(o *BigBillDate, tt time.Time) error {
+		update_called = true
+		assert.Equal(t, p, tt)
+		return nil
+	})
+	monkey.Patch(http.Get, func(u string) (resp *http.Response, err error) {
+		assert.Equal(t, "https://fake.com/api/transactions?amount=-100.00&account=000000&created__gt=2000-01-01T00:00:00", u)
+		r := http.Response{StatusCode: 200, Status: "200 OK", Body: ioutil.NopCloser(bytes.NewBufferString(`{"data":[{"id":1,"description":"","amount":-100.00,"account":37366510,"created":"2000-01-02T00:00:00+11:00"}]}`))}
+		return &r, nil
+	})
+	paid, err := b.CheckRepayments()
+	assert.Equal(t, true, paid)
+	assert.Nil(t, err)
+	assert.True(t, update_called, "UpdatePaid not called")
 }

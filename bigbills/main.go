@@ -33,7 +33,7 @@ func CheckLate(b BigBills) error {
 		}
 		message := "Need to move BigBills:"
 		for _, detail := range late {
-			message = fmt.Sprintf("%s\n%s from %s ago", message, detail.Amount, detail.Days)
+			message = fmt.Sprintf("%s\n$%0.2f from %d days ago", message, detail.Amount, detail.Days)
 		}
 		log.Print(message)
 		_, err := Notify(message)

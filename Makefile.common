@@ -2,6 +2,7 @@ IMAGE_NAME ?= $(shell basename $$(pwd))
 GIT_SHA = $(shell git rev-parse --short HEAD)
 
 package-common:
+	cp build.dockerignore .dockerignore || true ; \
 	docker buildx build \
 		--cache-from=type=local,src=/tmp/cache \
 		--cache-to=type=local,dest=/tmp/cache \
@@ -18,7 +19,7 @@ kustomize-common:
 	kustomize build --enable-alpha-plugins kustomize | kubectl apply -f -
 
 test-common:
-	docker-compose run test
+	docker run -v $(shell pwd):/build ghcr.io/codingric/gotester find .
 
 %: %-common
 	@true

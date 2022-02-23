@@ -23,7 +23,28 @@ orbs:
 setup: << pipeline.parameters.setup >>
 
 jobs:
-  build-docker:
+  test:
+    parameters:
+      pipe_name:
+        type: string
+        default: ""
+    docker:
+      - image: ghcr.io/codingric/gotester
+    resource_class: medium
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: "Run Tests"
+          working_directory: << parameters.pipe_name >>
+          no_output_timeout: 15m
+          command: |
+            go mod download -x
+            go test -gcflags=all=-l -v -coverprofile coverage.out
+            go tool cover -html coverage.out -o coverage.html
+      - store_artifacts:
+          path: coverage.html
+  build:
     parameters:
       pipe_name:
         type: string
@@ -34,11 +55,6 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker
-      - run:
-          name: "Run Tests"
-          working_directory: << parameters.pipe_name >>
-          no_output_timeout: 15m
-          command: make test
       - run: mkdir /tmp/cache
       - restore_cache:
           keys:
@@ -91,10 +107,14 @@ workflows:
           # line:
           # <regex path-to-test> <parameter-to-set> <value-of-pipeline-parameter>
           mapping: |
-            mailparser/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile) mailparser true
-            backend/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile) backend true
-            bigbills/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile) bigbills true
-            auditor/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile) auditor true
+            \.circleci.* mailparser true
+            \.circleci.* backend true
+            \.circleci.* bigbills true
+            \.circleci.* auditor true
+            mailparser/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) mailparser true
+            backend/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) backend true
+            bigbills/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) bigbills true
+            auditor/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) auditor true
             .* setup false
           base-revision: << pipeline.git.branch >>
           # this is the path of the configuration we should trigger once
@@ -105,40 +125,56 @@ workflows:
   build-mailparser:
     when: "<< pipeline.parameters.mailparser >>"
     jobs:
-      - build-docker:
+      - test:
           pipe_name: mailparser
+      - build:
+          pipe_name: mailparser
+          requires:
+            - test
       - deploy:
           pipe_name: mailparser
           requires:
-            - build-docker
+            - build
           context: k3s
   build-backend:
     when: "<< pipeline.parameters.backend >>"
     jobs:
-      - build-docker:
+      - test:
           pipe_name: backend
+      - build:
+          pipe_name: backend
+          requires:
+            - test
       - deploy:
           pipe_name: backend
           requires:
-            - build-docker
+            - build
           context: k3s
   build-bigbills:
     when: "<< pipeline.parameters.bigbills >>"
     jobs:
-      - build-docker:
+      - test:
           pipe_name: bigbills
+      - build:
+          pipe_name: bigbills
+          requires:
+            - test
       - deploy:
           pipe_name: bigbills
           requires:
-            - build-docker
+            - build
           context: k3s
   build-auditor:
     when: "<< pipeline.parameters.auditor >>"
     jobs:
-      - build-docker:
+      - test:
           pipe_name: auditor
+      - build:
+          pipe_name: auditor
+          requires:
+            - test
       - deploy:
           pipe_name: auditor
           requires:
-            - build-docker
+            - build
           context: k3s

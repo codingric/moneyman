@@ -41,9 +41,10 @@ jobs:
           command: |
             go mod download -x
             go test -gcflags=all=-l -v -coverprofile coverage.out
-            go tool cover -html coverage.out -o coverage.html
+            go tool cover -html coverage.out -o /tmp/coverage.html
       - store_artifacts:
-          path: coverage.html
+          path: /tmp/coverage.html
+          destination: coverage.html
   build:
     parameters:
       pipe_name:

@@ -48,8 +48,7 @@ jobs:
             go test -gcflags=all=-l -v -coverprofile coverage.out
             go tool cover -html coverage.out -o /tmp/coverage.html
       - store_cache:
-          keys:
-            - << parameters.pipe_name >>-test-modules
+          key: << parameters.pipe_name >>-test-modules
           paths:
             - /go/src
       - store_artifacts:

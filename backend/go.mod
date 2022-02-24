@@ -3,11 +3,11 @@ module github.com/codingric/moneyman/backend
 go 1.17
 
 require (
-	controllers v0.0.0
 	github.com/gin-gonic/gin v1.7.7
 	github.com/stretchr/testify v1.7.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
-	models v0.0.0
+	gorm.io/driver/sqlite v1.2.6
+	gorm.io/gorm v1.22.4
 )
 
 require (
@@ -35,11 +35,4 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	gorm.io/driver/sqlite v1.2.6 // indirect
-	gorm.io/gorm v1.22.4 // indirect
-)
-
-replace (
-	controllers => ./controllers
-	models => ./models
 )

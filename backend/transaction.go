@@ -1,4 +1,4 @@
-package controllers
+package main
 
 import (
 	"crypto/md5"
@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,11 +19,20 @@ type CreateTransactionInput struct {
 	Account     string    `json:"account" binding:"required"`
 }
 
+type Transaction struct {
+	ID          uint      `json:"id" gorm:"primary_key"`
+	Md5         string    `json:"-" gorm:"unique"`
+	Description string    `json:"description"`
+	Amount      float64   `json:"amount"`
+	Account     int64     `json:"account"`
+	Created     time.Time `json:"created"`
+}
+
 // GET /transactions
 // Find all transactions
 func FindTransactions(c *gin.Context) {
 	filters := c.Request.URL.Query()
-	query := models.DB
+	query := DB
 	for filter, value := range filters {
 		p := strings.Split(filter, "__")
 		op := "eq"
@@ -41,7 +48,7 @@ func FindTransactions(c *gin.Context) {
 			d, _ := time.Parse("2006-01-02T15:04:05", val)
 			val = d.Format("2006-01-02 15:04:05")
 		}
-		if models.Debug {
+		if Debug {
 			log.Printf("Filter: %v %v %v", field, op, val)
 		}
 
@@ -65,7 +72,7 @@ func FindTransactions(c *gin.Context) {
 			return
 		}
 	}
-	var transactions []models.Transaction
+	var transactions []Transaction
 	query.Find(&transactions)
 
 	c.JSON(http.StatusOK, gin.H{"data": transactions})
@@ -75,8 +82,8 @@ func FindTransactions(c *gin.Context) {
 // Find a transaction
 func FindTransaction(c *gin.Context) {
 	// Get model if exist
-	var transaction models.Transaction
-	if err := models.DB.Where("id = ?", c.Param("id")).First(&transaction).Error; err != nil {
+	var transaction Transaction
+	if err := DB.Where("id = ?", c.Param("id")).First(&transaction).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Record not found!"})
 		return
 	}
@@ -91,7 +98,7 @@ func CreateTransaction(c *gin.Context) {
 	var input CreateTransactionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		if models.Debug {
+		if Debug {
 			log.Printf("CreateTransaction.error: %s", err.Error())
 		}
 		return
@@ -100,7 +107,7 @@ func CreateTransaction(c *gin.Context) {
 	b := []string{fmt.Sprint(input.Created.Unix()), input.Account, input.Amount, input.Description}
 	d := strings.Join(b, "!")
 	h := md5.Sum([]byte(d))
-	if models.Debug {
+	if Debug {
 		log.Printf("Hash: %x", h)
 	}
 
@@ -108,8 +115,8 @@ func CreateTransaction(c *gin.Context) {
 	f, _ := strconv.ParseFloat(input.Amount, 64)
 	a, _ := strconv.ParseInt(input.Account, 10, 64)
 	//t, _ := time.Parse("2006-01-02", input.Created)
-	transaction := models.Transaction{Md5: fmt.Sprintf("%x", h), Created: input.Created, Amount: f, Description: input.Description, Account: a}
-	result := models.DB.Create(&transaction)
+	transaction := Transaction{Md5: fmt.Sprintf("%x", h), Created: input.Created, Amount: f, Description: input.Description, Account: a}
+	result := DB.Create(&transaction)
 
 	if result.Error != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": result.Error})
@@ -155,8 +162,8 @@ func CreateTransaction(c *gin.Context) {
 // 		// Create transaction
 // 		f, _ := strconv.ParseFloat(amount, 64)
 // 		a, _ := strconv.ParseInt(row[1], 10, 64)
-// 		transaction := models.Transaction{Md5: fmt.Sprintf("%x", h), Created: created, Amount: f, Description: row[2], Account: a}
-// 		result := models.DB.Debug().Create(&transaction)
+// 		transaction := Transaction{Md5: fmt.Sprintf("%x", h), Created: created, Amount: f, Description: row[2], Account: a}
+// 		result := DB.Debug().Create(&transaction)
 
 // 		if result.Error != nil {
 // 			skipped = append(skipped, gin.H{"index": index, "error": fmt.Sprint(result.Error)})

@@ -3,9 +3,6 @@ package main
 import (
 	"log"
 
-	"controllers"
-	"models"
-
 	"github.com/gin-gonic/gin"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -24,7 +21,7 @@ func main() {
 	}
 
 	// Connect to database
-	models.ConnectDatabase(*database_path, *verbose)
+	ConnectDatabase(*database_path, *verbose)
 
 	// Run the server
 	setupServer(true).Run()
@@ -35,16 +32,10 @@ func setupServer(debug bool) *gin.Engine {
 	r := gin.New()
 
 	// Routes
-	r.GET("/accounts", controllers.FindAccounts)
-	r.GET("/accounts/:id", controllers.FindAccount)
-	r.POST("/accounts", controllers.CreateAccount)
-	r.PATCH("/accounts/:id", controllers.UpdateAccount)
-	r.DELETE("/accounts/:id", controllers.DeleteAccount)
-
-	r.GET("/transactions", controllers.FindTransactions)
-	r.GET("/transactions/:id", controllers.FindTransaction)
-	r.POST("/transactions", controllers.CreateTransaction)
-	//r.POST("/upload", controllers.Upload)
-
+	r.GET("/accounts", FindAccounts)
+	r.GET("/accounts/:id", FindAccount)
+	r.POST("/accounts", CreateAccount)
+	r.PATCH("/accounts/:id", UpdateAccount)
+	r.GET("/transactions", FindTransactions)
 	return r
 }

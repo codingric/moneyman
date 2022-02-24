@@ -1,4 +1,4 @@
-package models
+package main
 
 import (
 	"gorm.io/driver/sqlite"

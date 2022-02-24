@@ -1,13 +1,16 @@
-package controllers
+package main
 
 import (
 	"net/http"
 	"strconv"
 
-	"models"
-
 	"github.com/gin-gonic/gin"
 )
+
+type Account struct {
+	ID   int64  `json:"id" gorm:"primary_key"`
+	Name string `json:"name"`
+}
 
 type CreateAccountInput struct {
 	ID   string `json:"id" binding:"required"`
@@ -22,8 +25,8 @@ type UpdateAccountInput struct {
 // GET /accounts
 // Find all accounts
 func FindAccounts(c *gin.Context) {
-	var accounts []models.Account
-	models.DB.Find(&accounts)
+	var accounts []Account
+	DB.Find(&accounts)
 
 	c.JSON(http.StatusOK, gin.H{"data": accounts})
 }
@@ -32,8 +35,8 @@ func FindAccounts(c *gin.Context) {
 // Find a account
 func FindAccount(c *gin.Context) {
 	// Get model if exist
-	var account models.Account
-	if err := models.DB.Where("id = ?", c.Param("id")).First(&account).Error; err != nil {
+	var account Account
+	if err := DB.Where("id = ?", c.Param("id")).First(&account).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Record not found!"})
 		return
 	}
@@ -53,8 +56,8 @@ func CreateAccount(c *gin.Context) {
 
 	// Create account
 	i, _ := strconv.ParseInt(input.ID, 10, 64)
-	account := models.Account{ID: i, Name: input.Name}
-	models.DB.Create(&account)
+	account := Account{ID: i, Name: input.Name}
+	DB.Create(&account)
 
 	c.JSON(http.StatusOK, gin.H{"data": account})
 }
@@ -63,8 +66,8 @@ func CreateAccount(c *gin.Context) {
 // Update a account
 func UpdateAccount(c *gin.Context) {
 	// Get model if exist
-	var account models.Account
-	if err := models.DB.Where("id = ?", c.Param("id")).First(&account).Error; err != nil {
+	var account Account
+	if err := DB.Where("id = ?", c.Param("id")).First(&account).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Record not found!"})
 		return
 	}
@@ -76,7 +79,7 @@ func UpdateAccount(c *gin.Context) {
 		return
 	}
 
-	models.DB.Model(&account).Updates(input)
+	DB.Model(&account).Updates(input)
 
 	c.JSON(http.StatusOK, gin.H{"data": account})
 }
@@ -85,13 +88,13 @@ func UpdateAccount(c *gin.Context) {
 // Delete a account
 func DeleteAccount(c *gin.Context) {
 	// Get model if exist
-	var account models.Account
-	if err := models.DB.Where("id = ?", c.Param("id")).First(&account).Error; err != nil {
+	var account Account
+	if err := DB.Where("id = ?", c.Param("id")).First(&account).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Record not found!"})
 		return
 	}
 
-	models.DB.Delete(&account)
+	DB.Delete(&account)
 
 	c.JSON(http.StatusOK, gin.H{"data": true})
 }

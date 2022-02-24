@@ -1,9 +1,8 @@
-package controllers
+package main
 
 import (
 	"bytes"
 	"io/ioutil"
-	"models"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,8 +13,8 @@ import (
 
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
-	models.Debug = true
-	models.ConnectDatabase(":memory:", false)
+	Debug = true
+	ConnectDatabase(":memory:", false)
 	m.Run()
 }
 

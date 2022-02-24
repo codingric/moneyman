@@ -47,7 +47,7 @@ jobs:
             go mod download -x
             go test -gcflags=all=-l -v -coverprofile coverage.out
             go tool cover -html coverage.out -o /tmp/coverage.html
-      - store_cache:
+      - save_cache: 
           key: << parameters.pipe_name >>-test-modules
           paths:
             - /go/src

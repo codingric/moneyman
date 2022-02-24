@@ -19,7 +19,7 @@ kustomize-common:
 	kustomize build --enable-alpha-plugins kustomize | kubectl apply -f -
 
 test-common:
-	docker run -v $(shell pwd):/build ghcr.io/codingric/gotester find .
+	docker run -v $(shell pwd):/build ghcr.io/codingric/gotester
 
 %: %-common
 	@true

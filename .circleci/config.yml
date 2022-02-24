@@ -34,6 +34,11 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker
+      - restore_cache:
+          keys:
+            - << parameters.pipe_name >>-test-modules
+          paths:
+            - /go/src
       - run:
           name: "Run Tests"
           working_directory: << parameters.pipe_name >>
@@ -42,6 +47,11 @@ jobs:
             go mod download -x
             go test -gcflags=all=-l -v -coverprofile coverage.out
             go tool cover -html coverage.out -o /tmp/coverage.html
+      - store_cache:
+          keys:
+            - << parameters.pipe_name >>-test-modules
+          paths:
+            - /go/src
       - store_artifacts:
           path: /tmp/coverage.html
           destination: coverage.html

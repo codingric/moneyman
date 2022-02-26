@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: moneyman-up-webhook
+  labels:
+    app: moneyman-up-webhook
+spec:
+  type: ClusterIP
+  ports:
+    - name: moneyman-up-webhook
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: moneyman-up-webhook

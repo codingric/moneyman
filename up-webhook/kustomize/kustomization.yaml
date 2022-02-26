@@ -1,0 +1,10 @@
+resources:
+  - deployment.yaml
+  - ingress.yaml
+  - service.yaml
+namespace: default
+generators:
+  - secret-generator.yaml
+# images:
+#   - name: ghcr.io/codingric/moneyman/auditor
+#     newTag: ${GIT_SHA}

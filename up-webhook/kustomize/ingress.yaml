@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: moneyman-up-webhook
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.org/client-max-body-size: "0"
+    nginx.org/proxy-connect-timeout: 600s
+    nginx.org/proxy-read-timeout: 600s
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+    - host: moneyman.k3s.salinas.id.au
+      http:
+        paths:
+          - path: /webhooks/up(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: moneyman-up-webhook
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - moneyman.k3s.salinas.id.au
+      secretName: moneyman-up-webhook-tls

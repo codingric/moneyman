@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -79,19 +80,39 @@ type Amount struct {
 
 type TransactionStatusEnum string
 
+type UpServicer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+type upService struct {
+	client *http.Client
+}
+
+func (u *upService) Do(req *http.Request) (*http.Response, error) {
+	return u.client.Do(req)
+}
+
+var (
+	UpService UpServicer = &upService{client: http.DefaultClient}
+)
+
 func (t *UpTransaction) Get(id string) error {
+	if id == "" {
+		return errors.New("Transaction.Get requires id")
+	}
 	url := fmt.Sprintf("https://api.up.com.au/api/v1/transactions/%s", id)
 	req, _ := http.NewRequest("GET", url, bytes.NewBuffer([]byte(``)))
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", viper.GetString("bearer")))
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := UpService.Do(req)
 	if err != nil {
 		logger.Error("Failed to get transaction (%s): %s", id, err.Error())
-		return err
+		return fmt.Errorf("Failure while requesting Transaction(%s)", id)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		logger.Error("Failed StatusCode transaction (%s): %s", id, resp.StatusCode)
+		logger.Error("Failed StatusCode transaction (%s): %d", id, resp.StatusCode)
+		return fmt.Errorf("Failure StatusCode while requsting Transaction(%s): %d", id, resp.StatusCode)
 	}
 
 	resp_bytes, _ := ioutil.ReadAll(resp.Body)
@@ -99,12 +120,12 @@ func (t *UpTransaction) Get(id string) error {
 
 	if err := json.Unmarshal(resp_bytes, &t); err != nil {
 		logger.Error("Failure parsing response: Transaction(%s) - %s", id, err.Error())
-		return err
+		return fmt.Errorf("Failure parsing response for Transaction(%s)", id)
 	}
 
-	if t.Data.Id == "" || t.Data.Attributes.Amount.ValueInBaseUnits == 0 {
+	if t.Data.Id == "" {
 		logger.Error("Response not valid")
-		return fmt.Errorf("transaction %s unable to be retreived", id)
+		return fmt.Errorf("Failure retrieving data for Transaction(%s)", id)
 	}
 
 	logger.Debug("Transaction: %v", t)

@@ -50,10 +50,33 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(body, &event)
 	if err != nil {
 		logger.Error("Failed to parse WebhookEvent: %v", err)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+
 	logger.Debug("WebhookEvent: %v", event)
+
+	if event.Data.Attributes.EventType == "TRANSACTION_CREATED" {
+
+		var trans UpTransaction
+		if err := trans.Get(event.Data.Relationships.Transaction.Data.Id); err != nil {
+			logger.Error("Failed to get Transaction: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		backend := BackendTransaction{
+			Created:     trans.Data.Attributes.CreatedAt,
+			Amount:      trans.Data.Attributes.Amount.Value,
+			Description: trans.Data.Attributes.Description,
+			Account:     trans.Data.Relationships.Account.Data.Id,
+		}
+		if err := backend.Post(); err != nil {
+			logger.Error("Failed to save backend Transaction: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+	}
 
 	w.Write([]byte("OK\n"))
 }

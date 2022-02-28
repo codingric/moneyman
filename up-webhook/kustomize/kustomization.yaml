@@ -5,6 +5,6 @@ resources:
 namespace: default
 generators:
   - secret-generator.yaml
-# images:
-#   - name: ghcr.io/codingric/moneyman/auditor
-#     newTag: ${GIT_SHA}
+images:
+  - name: ghcr.io/codingric/moneyman/up-webhook
+    newTag: ${GIT_SHA}

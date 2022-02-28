@@ -13,6 +13,9 @@ parameters:
   auditor:
     type: boolean
     default: false
+  up-webhook:
+    type: boolean
+    default: false
   setup:
     type: boolean
     default: true
@@ -47,7 +50,7 @@ jobs:
             go mod download -x
             go test -gcflags=all=-l -v -coverprofile coverage.out
             go tool cover -html coverage.out -o /tmp/coverage.html
-      - save_cache: 
+      - save_cache:
           key: << parameters.pipe_name >>-test-modules
           paths:
             - /go/src
@@ -121,10 +124,12 @@ workflows:
             \.circleci.* backend true
             \.circleci.* bigbills true
             \.circleci.* auditor true
+            \.circleci.* up-webhook true
             mailparser/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) mailparser true
             backend/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) backend true
             bigbills/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) bigbills true
             auditor/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) auditor true
+            up-webhook/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) up-webhook true
             .* setup false
           base-revision: << pipeline.git.branch >>
           # this is the path of the configuration we should trigger once
@@ -185,6 +190,20 @@ workflows:
             - test
       - deploy:
           pipe_name: auditor
+          requires:
+            - build
+          context: k3s
+  build-up-webhook:
+    when: "<< pipeline.parameters.up-webhook >>"
+    jobs:
+      - test:
+          pipe_name: up-webhook
+      - build:
+          pipe_name: up-webhook
+          requires:
+            - test
+      - deploy:
+          pipe_name: up-webhook
           requires:
             - build
           context: k3s

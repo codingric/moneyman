@@ -6,6 +6,7 @@ import (
 	"path"
 
 	"github.com/ian-kent/go-log/layout"
+	"github.com/ian-kent/go-log/levels"
 	"github.com/ian-kent/go-log/log"
 
 	"github.com/spf13/viper"
@@ -13,20 +14,27 @@ import (
 
 var logger = log.Logger()
 
+func init() {
+	layout.DefaultTimeLayout = "2006-01-02 15:04:05"
+	logger.Appender().SetLayout(layout.Pattern("%d %p %m"))
+	logger.SetLevel(levels.INFO)
+}
+
 func main() {
 	if err := Configure(); err != nil {
-		logger.Fatal("Config error: %s", err.Error())
+		CrashAndBurn(err.Error())
 	}
-	if err := RunServer(); err != nil {
-		logger.Fatal("Fatal: %s", err.Error())
+	if err := RunWebhook(); err != nil {
+		CrashAndBurn(err.Error())
 	}
 
 }
 
-func Configure() error {
-	layout.DefaultTimeLayout = "2006-01-02 15:04:05"
-	logger.Appender().SetLayout(layout.Pattern("%d %p %m"))
+func CrashAndBurn(message string) {
+	logger.Fatal("Fatal: %s", message)
+}
 
+func Configure() error {
 	viper.SetDefault("log_level", "INFO")
 	viper.SetDefault("port", 8080)
 	viper.SetConfigName("config")

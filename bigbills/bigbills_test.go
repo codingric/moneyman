@@ -283,4 +283,14 @@ func TestBigBillsDateCheckRepayments(t *testing.T) {
 	assert.Equal(t, true, paid)
 	assert.Nil(t, err)
 	assert.True(t, update_called, "UpdatePaid not called")
+
+	monkey.Patch(http.Get, func(u string) (resp *http.Response, err error) {
+		assert.Equal(t, "https://fake.com/api/transactions?amount=-100.00&account=000000&created__gt=2000-01-01T00:00:00", u)
+		r := http.Response{StatusCode: 200, Status: "200 OK", Body: ioutil.NopCloser(bytes.NewBufferString(`{"data":null}`))}
+		return &r, nil
+	})
+	paid, err = b.CheckRepayments()
+	assert.Equal(t, false, paid)
+	assert.Nil(t, err)
+	assert.True(t, update_called, "UpdatePaid not called")
 }

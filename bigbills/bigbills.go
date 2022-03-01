@@ -167,7 +167,9 @@ func (p *BigBillDate) CheckRepayments() (paid bool, err error) {
 	var result APIResponse
 	json.Unmarshal(rb, &result)
 	paid = len(result.Data) == 1
-	p.UpdatePaid(result.Data[0].Created)
+	if paid {
+		p.UpdatePaid(result.Data[0].Created)
+	}
 	return
 }
 

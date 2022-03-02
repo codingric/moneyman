@@ -6,7 +6,7 @@ metadata:
   labels:
     app: moneyman-mailparser
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - name: moneyman-mailparser
       port: 8081

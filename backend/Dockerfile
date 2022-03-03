@@ -4,14 +4,13 @@ WORKDIR /build
 
 RUN apk add gcc libc-dev git
 
-RUN go install github.com/mattn/go-sqlite3
-
 COPY go.* .
-RUN go mod download
+#RUN CGO_ENABLED=1 go install github.com/mattn/go-sqlite3
+RUN CGO_ENABLED=1 go mod download -x
 
 COPY . .
 
-RUN go build -o backend
+RUN CGO_ENABLED=1 go build -o backend -x
 
 FROM alpine:3.14
 LABEL org.opencontainers.image.source https://github.com/codingric/moneyman

@@ -4,8 +4,12 @@ WORKDIR /build
 
 RUN apk add gcc libc-dev git
 
-COPY . /build/
-RUN go install github.com/mattn/go-sqlite3; go mod download
+RUN go install github.com/mattn/go-sqlite3
+
+COPY go.* .
+RUN go mod download
+
+COPY . .
 
 RUN go build -o backend
 

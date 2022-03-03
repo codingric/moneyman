@@ -37,5 +37,6 @@ func setupServer(debug bool) *gin.Engine {
 	r.POST("/accounts", CreateAccount)
 	r.PATCH("/accounts/:id", UpdateAccount)
 	r.GET("/transactions", FindTransactions)
+	r.POST("/transactions", CreateTransaction)
 	return r
 }

@@ -29,6 +29,7 @@ func main() {
 	Configure()
 
 	http.HandleFunc("/", Handler)
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
 	log.Println("Server started at port " + viper.GetString("port"))
 	log.Fatal(http.ListenAndServe(":"+viper.GetString("port"), nil))
 }

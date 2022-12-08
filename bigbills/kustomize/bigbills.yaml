@@ -16,8 +16,10 @@ spec:
                   value: "Australia/Melbourne"
               args:
                 - "-c"
-                - "/etc/bigbills/config.yaml"
+                - "/etc/bigbills/config.toml"
                 - "-v"
+                - "-a"
+                - "/etc/bigbills/age.key"
               imagePullPolicy: Always
               volumeMounts:
                 - mountPath: "/etc/bigbills/config.toml"

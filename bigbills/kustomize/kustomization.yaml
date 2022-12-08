@@ -8,3 +8,5 @@ configMapGenerator:
 - name: bigbills-config
   files:
     - config.toml
+  options:
+    disableNameSuffixHash: true

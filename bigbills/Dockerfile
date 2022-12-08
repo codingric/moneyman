@@ -9,6 +9,7 @@ RUN go mod download
 
 COPY ./ .
 RUN go version \
+    && find \
     && go build -o moneyman-bigbills
 
 FROM alpine:3.14

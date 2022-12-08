@@ -3,4 +3,5 @@
 !go.*
 !bigbills
 !notify
+!config
 */*_test.go

@@ -127,7 +127,7 @@ workflows:
             (\.circleci.*|Makefile.common) up-webhook true
             mailparser/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) mailparser true
             backend/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) backend true
-            bigbills/.*(go|test|Dockerfile|kustomize).* bigbills true
+            bigbills/.* bigbills true
             auditor/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) auditor true
             up-webhook/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) up-webhook true
             .* setup false

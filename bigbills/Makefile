@@ -18,6 +18,15 @@ test:
 
 package:
 	cp build.dockerignore .dockerignore || true ; \
-	unset DOCKER_HOST ;\
-	docker context ls 
+	docker context create buildx-build ; \
+	docker buildx create --use buildx-build ; \
+	docker buildx build \
+	--cache-from=type=local,src=/tmp/cache \
+	--cache-to=type=local,dest=/tmp/cache \
+	--platform linux/arm64 \
+	-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):latest \
+	-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):$(GIT_SHA) \
+	--progress plain \
+	--push \
+	.
 	

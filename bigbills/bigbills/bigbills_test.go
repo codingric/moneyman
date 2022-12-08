@@ -124,8 +124,8 @@ func TestBigBillsDateUpdatePaid(t *testing.T) {
 
 	expected := sheets.ValueRange{MajorDimension: "", Range: "", Values: [][]interface{}{{"01/01/2000"}}}
 	monkey.PatchInstanceMethod(reflect.TypeOf((*sheets.SpreadsheetsValuesService)(nil)), "Update", func(s *sheets.SpreadsheetsValuesService, spreadsheetId string, range_ string, valuerange *sheets.ValueRange) (o *sheets.SpreadsheetsValuesUpdateCall) {
-		assert.Equal(t, "testspreadsheetid", spreadsheetId)
-		assert.Equal(t, "Big Bills!P2", range_)
+		assert.Equal(t, "longid", spreadsheetId)
+		assert.Equal(t, "Tab!A2:B", range_)
 		assert.Equal(t, &expected, valuerange)
 		return &sheets.SpreadsheetsValuesUpdateCall{}
 	})

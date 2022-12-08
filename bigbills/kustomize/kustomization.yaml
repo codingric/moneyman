@@ -5,6 +5,6 @@ images:
   - name: ghcr.io/codingric/moneyman/bigbills
     newTag: ${GIT_SHA}
 configMapGenerator:
-- name: bigbils-config
+- name: bigbills-config
   files:
     - config.toml

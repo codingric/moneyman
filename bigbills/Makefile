@@ -15,3 +15,9 @@ local-tests:
 
 test:
 	docker run -v $(shell pwd):/build ghcr.io/codingric/gotester
+
+package:
+	cp build.dockerignore .dockerignore || true ; \
+	unset DOCKER_HOST ;\
+	docker context ls 
+	

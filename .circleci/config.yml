@@ -120,11 +120,11 @@ workflows:
           # line:
           # <regex path-to-test> <parameter-to-set> <value-of-pipeline-parameter>
           mapping: |
-            \.circleci.* mailparser true
-            \.circleci.* backend true
-            \.circleci.* bigbills true
-            \.circleci.* auditor true
-            \.circleci.* up-webhook true
+            (\.circleci.*|Makefile.common) mailparser true
+            (\.circleci.*|Makefile.common) backend true
+            (\.circleci.*|Makefile.common) bigbills true
+            (\.circleci.*|Makefile.common) auditor true
+            (\.circleci.*|Makefile.common) up-webhook true
             mailparser/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) mailparser true
             backend/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) backend true
             bigbills/.*(go|test|Dockerfile|kustomize).* bigbills true

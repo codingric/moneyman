@@ -12,3 +12,6 @@ update-config:
 
 local-tests:
 	@go test ./... -gcflags=all=-l -v -coverprofile coverage.out $(RUN) && go tool cover -html coverage.out
+
+test:
+	docker run -v $(shell pwd):/build ghcr.io/codingric/gotester

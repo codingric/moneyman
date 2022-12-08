@@ -3,6 +3,8 @@ GIT_SHA = $(shell git rev-parse --short HEAD)
 
 package-common:
 	cp build.dockerignore .dockerignore || true ; \
+	docker context create $(IMAGE_NAME) ; \
+	docker buildx create --name $(IMAGE_NAME) --use ; \
 	docker buildx build \
 		--cache-from=type=local,src=/tmp/cache \
 		--cache-to=type=local,dest=/tmp/cache \

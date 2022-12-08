@@ -1,49 +1,23 @@
 package main
 
 import (
-	"fmt"
-	"log"
-
-	"github.com/spf13/viper"
+	"bigbills/bigbills"
+	"bigbills/config"
+	"bigbills/notify"
 )
 
 func main() {
+	config.Init()
+	bills := &bigbills.BigBills{}
 
-	LoadConfig()
-	var bills BigBills
-
-	if err := bills.Hydrate(); err != nil {
-		log.Fatalf("Failure: %s", err.Error())
-	}
-
-	if err := CheckLate(bills); err != nil {
-		log.Fatalf("Failure: %s", err.Error())
-	}
-}
-
-func CheckLate(b BigBills) error {
-	late, err := b.GetLate()
+	message, err := bills.CheckLate()
 	if err != nil {
-		return err
+		panic(err.Error())
 	}
 
-	if len(late) > 0 {
-		if viper.GetBool("verbose") {
-			log.Printf("%d overdue BigBills detected.\n", len(late))
-		}
-		message := "Need to move BigBills:"
-		for _, detail := range late {
-			message = fmt.Sprintf("%s\n$%0.2f from %d days ago", message, detail.Amount, detail.Days)
-		}
-		log.Print(message)
-		_, err := Notify(message)
-		if err != nil {
-			return err
-		}
-	} else {
-		if viper.GetBool("verbose") {
-			log.Println("No overdue BigBills detected.")
+	if message != "" {
+		if resp, e := notify.Notify(message); e != nil {
+			panic(resp)
 		}
 	}
-	return nil
 }

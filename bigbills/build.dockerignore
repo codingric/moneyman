@@ -1,3 +1,6 @@
 *
 !*.go
 !go.*
+!bigbills
+!notify
+*/*_test.go

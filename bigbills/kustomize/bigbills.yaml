@@ -20,11 +20,19 @@ spec:
                 - "-v"
               imagePullPolicy: Always
               volumeMounts:
-                - mountPath: "/etc/bigbills"
-                  name: bigbills
+                - mountPath: "/etc/bigbills/config.toml"
+                  name: config
                   readOnly: true
+                  subPath: config.toml
+                - mountPath: "/etc/bigbills/age.key"
+                  name: age
+                  readOnly: true
+                  subPath: age.key
           volumes:
-            - name: bigbills
+            - name: config
+              configMap:
+                name: bigbills-config
+            - name: age
               secret:
-                secretName: moneyman-bigbills
+                secretName: moneyman-age-key
           restartPolicy: Never

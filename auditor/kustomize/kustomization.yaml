@@ -2,13 +2,14 @@ resources:
   - auditor.yaml
 namespace: default
 
+generatorOptions:
+  disableNameSuffixHash: true
+
 configMapGenerator:
 - name: auditor-config
   files:
     - config.yaml
-  options:
-    disableNameSuffixHash: true
-- name: kustomize-deployment
+- name: kustomize-auditor-deployment
   envs:
   - deploy.env
 
@@ -16,7 +17,7 @@ vars:
 - name: GIT_SHA
   objref:
     kind: ConfigMap
-    name: kustomize-deployment
+    name: kustomize-auditor-deployment
     apiVersion: v1
   fieldref:
     fieldpath: data.GIT_SHA

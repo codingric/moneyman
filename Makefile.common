@@ -2,20 +2,19 @@ IMAGE_NAME ?= $(shell basename $$(pwd))
 GIT_SHA ?= $(shell git rev-parse --short HEAD)
 
 package-common:
+package:
 	cp build.dockerignore .dockerignore || true ; \
-	docker context ls ; \
-	docker context create $(IMAGE_NAME) ; \
-	docker buildx create --name $(IMAGE_NAME) --use ; \
-	docker buildx use $(IMAGE_NAME) ; \
+	docker context create buildx-build ; \
+	docker buildx create --use buildx-build ; \
 	docker buildx build \
-		--cache-from=type=local,src=/tmp/cache \
-		--cache-to=type=local,dest=/tmp/cache \
-		--platform linux/arm64 \
-		-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):latest \
-		-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):$(GIT_SHA) \
-		--progress plain \
-		--push \
-		.
+	--cache-from=type=local,src=/tmp/cache \
+	--cache-to=type=local,dest=/tmp/cache \
+	--platform linux/arm64 \
+	-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):latest \
+	-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):$(GIT_SHA) \
+	--progress plain \
+	--push \
+	.
 
 kustomize-common:
 	@mv kustomize/kustomization.yaml kustomize/_kustomization.yaml; \

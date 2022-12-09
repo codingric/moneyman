@@ -1,8 +1,25 @@
 resources:
   - auditor.yaml
 namespace: default
-images:
-  - name: ghcr.io/codingric/moneyman/auditor
-    newTag: ${GIT_SHA}
-generators:
-  - secret-generator.yaml
+
+configMapGenerator:
+- name: auditor-config
+  files:
+    - config.yaml
+  options:
+    disableNameSuffixHash: true
+- name: kustomize-deployment
+  envs:
+  - deploy.env
+
+vars:
+- name: GIT_SHA
+  objref:
+    kind: ConfigMap
+    name: kustomize-deployment
+    apiVersion: v1
+  fieldref:
+    fieldpath: data.GIT_SHA
+
+configurations:
+- configuration.yaml

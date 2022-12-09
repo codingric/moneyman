@@ -1,26 +1,37 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"io"
 	"math"
+	"os"
+	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"filippo.io/age"
+	"github.com/mitchellh/mapstructure"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/monaco-io/request"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
-func LoadConf() {
-	flag.Bool("v", false, "Verbose")
-	flag.Bool("dryrun", false, "Log instead of SMS")
+var ageKey *age.X25519Identity
 
-	viper.RegisterAlias("verbose", "v")
+func LoadConf() {
+	flag.Bool("dryrun", false, "Log instead of SMS")
+	flag.String("agekey", "/etc/auditor/age.key", "Age key")
+	flag.String("loglevel", zerolog.ErrorLevel.String(), "trace|debug|info|error|fatal|panic|disabled")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
@@ -32,14 +43,71 @@ func LoadConf() {
 	viper.AddConfigPath("/etc/auditor/")
 	err := viper.ReadInConfig()
 	if err != nil {
-		log.Fatalf("%v\n", err)
+		log.Fatal().Msgf("Unable to read config: %v", err)
 	}
 
-	if viper.GetBool("verbose") {
-		log.Println("Verbose: ON")
-		log.Printf("Config: `%s`\n", viper.ConfigFileUsed())
-	} else {
-		log.Println("Verbose: OFF")
+	lvl := zerolog.InfoLevel
+	lvl, err = zerolog.ParseLevel(viper.GetString("loglevel"))
+	if err != nil {
+		log.Error().Err(err).Msgf("Ignoring --loglevel")
+		lvl = zerolog.InfoLevel
+	}
+	zerolog.SetGlobalLevel(lvl)
+	log.Info().Msgf("Config loaded: `%s`", viper.ConfigFileUsed())
+
+	ageKey, err = loadAgeKey(viper.GetString("agekey"))
+	if err != nil {
+		log.Fatal().Msgf("Unable to load age key: %s", err.Error())
+	}
+}
+
+func loadAgeKey(p string) (a *age.X25519Identity, e error) {
+	b, err := os.ReadFile(p) // just pass the file name
+	if err != nil {
+		return nil, err
+	}
+	// Remove comments
+	re := regexp.MustCompile(`(s?)#.*\n`)
+	c := re.ReplaceAll(b, nil)
+	str := string(c) // convert content to a 'string'
+
+	a, e = age.ParseX25519Identity(strings.Trim(str, "\n"))
+	return
+}
+
+func decodeAge(s string, a *age.X25519Identity) string {
+	enc := strings.TrimPrefix(s, "age:")
+	eb, _ := base64.StdEncoding.DecodeString(enc)
+	r := bytes.NewReader(eb)
+	d, _ := age.Decrypt(r, a)
+	b := &bytes.Buffer{}
+	io.Copy(b, d)
+	return b.String()
+}
+
+func ageHookFunc(a *age.X25519Identity) mapstructure.DecodeHookFuncType {
+	// Wrapped in a function call to add optional input parameters (eg. separator)
+	return func(
+		f reflect.Type, // data type
+		t reflect.Type, // target data type
+		data interface{}, // raw data
+	) (interface{}, error) {
+
+		// Check if the data type matches the expected one
+		if f.Kind() != reflect.String {
+			return data, nil
+		}
+
+		// Check if the target type matches the expected one
+		if t.Kind() != reflect.String {
+			return data, nil
+		}
+
+		if !strings.HasPrefix(data.(string), "age:") {
+			return data, nil
+		}
+
+		return decodeAge(data.(string), a), nil
 	}
 }
 
@@ -47,7 +115,7 @@ func main() {
 	LoadConf()
 
 	if err := RunChecks(); err != nil {
-		log.Fatalf("Failure: %s", err.Error())
+		log.Fatal().Msgf("Failure: %s", err.Error())
 	}
 }
 
@@ -232,44 +300,55 @@ type TwilioRestException struct {
 	Status   int64    `xml:"Status"`
 }
 
+type Settings struct {
+	Sid     string   `mapstructure:"sid"`
+	Token   string   `mapstructure:"token"`
+	Mobiles []string `mapstructure:"mobiles"`
+}
+
 func Notify(message string) (err error) {
 	if viper.GetBool("dryrun") {
-		log.Println("SMS Constructed\n", message)
+		log.Info().Msgf("(DRYRUN) SMS : %s", message)
 		return nil
 	}
 
-	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + viper.GetString("notify.sid") + "/Messages"
+	var settings *Settings
+	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(ageHookFunc(ageKey))); err != nil {
+		log.Error().Err(err).Msg("Unable to load notify config")
+	}
 
-	for _, m := range viper.GetStringSlice("notify.mobiles") {
+	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + settings.Sid + "/Messages"
+
+	for _, m := range settings.Mobiles {
 		body := map[string]string{
 			"To":   m,
 			"From": "Budget",
 			"Body": message,
 		}
 		client := request.Client{
-			Method:         "POST",
-			URL:            endpoint,
-			BasicAuth:      request.BasicAuth{viper.GetString("notify.sid"), viper.GetString("notify.token")},
+			Method: "POST",
+			URL:    endpoint,
+			BasicAuth: request.BasicAuth{
+				Username: settings.Sid,
+				Password: settings.Token,
+			},
 			URLEncodedForm: body,
 		}
 		resp := client.Send()
 
 		switch resp.Response().StatusCode {
 		case 201:
-			if viper.GetBool("verbose") {
-				log.Println("Sent SMS Successfully")
-			}
-			continue
+			log.Debug().Msg("Sent SMS Successfully")
+			return nil
 		case 401:
-			err = errors.New("authentication failure")
+			return errors.New("authentication failure")
 		case 400:
 			var xml TwilioResponse
 			resp.ScanXML(&xml)
-			err = errors.New(xml.RestException.Message)
+			return errors.New(xml.RestException.Message)
 		default:
-			err = errors.New("twilio responded with failure")
+			return errors.New("twilio responded with failure")
 		}
-		return err
 	}
-	return nil
+	return errors.New("no mobiles to send to")
 }

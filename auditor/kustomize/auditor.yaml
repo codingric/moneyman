@@ -10,7 +10,7 @@ spec:
         spec:
           containers:
             - name: auditor
-              image: ghcr.io/codingric/moneyman/auditor
+              image: ghcr.io/codingric/moneyman/auditor:$(GIT_SHA)
               env:
                 - name: TZ
                   value: "Australia/Melbourne"

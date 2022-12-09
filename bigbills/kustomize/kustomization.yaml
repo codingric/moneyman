@@ -3,12 +3,6 @@ resources:
 
 namespace: default
 
-
-images:
-  - name: ghcr.io/codingric/moneyman/bigbills
-    newTag: b9ae82c
-
-
 configMapGenerator:
 - name: bigbills-config
   files:

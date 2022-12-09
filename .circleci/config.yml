@@ -90,7 +90,7 @@ jobs:
           paths:
             - /tmp/cache
   deploy:
-    circleci_ip_ranges: true
+    #circleci_ip_ranges: true
     parameters:
       pipe_name:
         type: string

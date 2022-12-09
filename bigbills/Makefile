@@ -18,20 +18,6 @@ local-tests:
 test:
 	docker run -v $(shell pwd):/build ghcr.io/codingric/gotester
 
-package:
-	cp build.dockerignore .dockerignore || true ; \
-	docker context create buildx-build ; \
-	docker buildx create --use buildx-build ; \
-	docker buildx build \
-	--cache-from=type=local,src=/tmp/cache \
-	--cache-to=type=local,dest=/tmp/cache \
-	--platform linux/arm64 \
-	-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):latest \
-	-t ghcr.io/codingric/moneyman/$(IMAGE_NAME):$(GIT_SHA) \
-	--progress plain \
-	--push \
-	.
-
 kustomize:
 	echo GIT_SHA=$(GIT_SHA) > kustomize/deploy.env; \
 	echo DEPLOYMENT_TIME=$(shell date +%s) >> kustomize/deploy.env; \

@@ -15,14 +15,25 @@ spec:
                 - name: TZ
                   value: "Australia/Melbourne"
               args:
-                - "-v"
+                - "-a"
+                - "/etc/auditor/age.key"
+                - "--loglevel"
+                - "debug"
               imagePullPolicy: Always
               volumeMounts:
-                - mountPath: "/etc/auditor"
-                  name: auditor
+                - mountPath: "/etc/auditor/config.yaml"
+                  name: config
                   readOnly: true
+                  subPath: config.yaml
+                - mountPath: "/etc/auditor/age.key"
+                  name: age
+                  readOnly: true
+                  subPath: age.key
           volumes:
-            - name: auditor
+            - name: config
+              configMap:
+                name: auditor-config
+            - name: age
               secret:
-                secretName: moneyman-auditor
+                secretName: moneyman-age-key
           restartPolicy: Never

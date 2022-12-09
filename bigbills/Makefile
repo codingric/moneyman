@@ -1,6 +1,8 @@
 include ../Makefile.common
 RUN = $(shell [ ! -z "$$TEST" ] && echo "-run $$TEST")
 
+.PHONY: kustomize
+
 update-config:
 	@export SECRET_YAML=$(shell mktemp) CONFIG_YAML=$(shell mktemp) && \
 	sops -d kustomize/bigbills-secret.enc.yaml > $$SECRET_YAML && \
@@ -29,4 +31,8 @@ package:
 	--progress plain \
 	--push \
 	.
-	
+
+kustomize:
+	echo GIT_SHA=$(GIT_SHA) > kustomize/deploy.env; \
+	echo DEPLOYMENT_TIME=$(shell date +%s) >> kustomize/deploy.env; \
+	kubectl apply -k kustomize

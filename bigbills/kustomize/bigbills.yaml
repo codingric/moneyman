@@ -10,7 +10,7 @@ spec:
         spec:
           containers:
             - name: bigbills
-              image: ghcr.io/codingric/moneyman/bigbills
+              image: ghcr.io/codingric/moneyman/bigbills:$(GIT_SHA)
               env:
                 - name: TZ
                   value: "Australia/Melbourne"

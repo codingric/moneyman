@@ -1,5 +1,5 @@
 IMAGE_NAME ?= $(shell basename $$(pwd))
-GIT_SHA = $(shell git rev-parse --short HEAD)
+GIT_SHA ?= $(shell git rev-parse --short HEAD)
 
 package-common:
 	cp build.dockerignore .dockerignore || true ; \

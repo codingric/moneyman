@@ -128,7 +128,7 @@ func RunChecks() error {
 	viper.UnmarshalKey("checks", &checks)
 	for _, check := range checks {
 		if viper.GetBool("verbose") {
-			log.Printf("Checking: %s (%s)", check["match"], check["type"])
+			log.Info().Msgf("Checking: %s (%s)", check["match"], check["type"])
 		}
 		days, _ := strconv.Atoi(check["days"])
 		message := string("")
@@ -152,7 +152,7 @@ func RunChecks() error {
 		if message != "" {
 			err := Notify(message)
 			if err != nil {
-				log.Printf("Notify error: %s", err.Error())
+				log.Error().Err(err).Msgf("Notify error: %s", err.Error())
 				return err
 			}
 		}
@@ -273,10 +273,10 @@ func CheckRepay(match string, from string, to string, days int) (msg string, err
 		}
 	}
 
-	if len(response.Data) > 0 && viper.GetBool("verbose") {
+	if len(response.Data) > 0 {
 		unpaid := len(result)
 		found := len(response.Data)
-		log.Printf("Transactions: %d/%d repaid", found-unpaid, found)
+		log.Info().Msgf("Transactions: %d/%d repaid", found-unpaid, found)
 	}
 	if len(result) > 0 {
 		msg = fmt.Sprintf("Move money from %s to %s:", from, to)

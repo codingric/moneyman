@@ -127,9 +127,7 @@ func RunChecks() error {
 	var checks []map[string]string
 	viper.UnmarshalKey("checks", &checks)
 	for _, check := range checks {
-		if viper.GetBool("verbose") {
-			log.Info().Msgf("Checking: %s (%s)", check["match"], check["type"])
-		}
+		log.Info().Msgf("Checking: %s (%s)", check["match"], check["type"])
 		days, _ := strconv.Atoi(check["days"])
 		message := string("")
 		switch check["type"] {

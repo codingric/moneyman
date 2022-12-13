@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/base64"
 	"encoding/xml"
 	"errors"
@@ -9,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"regexp"
@@ -18,20 +21,29 @@ import (
 
 	"filippo.io/age"
 	"github.com/mitchellh/mapstructure"
+	"github.com/monaco-io/request"
+	"github.com/rapidloop/skv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-
-	"github.com/monaco-io/request"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"github.com/teambition/rrule-go"
 )
 
-var ageKey *age.X25519Identity
+var (
+	ageKey     *age.X25519Identity
+	httpClient *http.Client
+)
+
+func init() {
+	httpClient = &http.Client{}
+}
 
 func LoadConf() {
 	flag.Bool("dryrun", false, "Log instead of SMS")
 	flag.String("agekey", "/etc/auditor/age.key", "Age key")
 	flag.String("loglevel", zerolog.ErrorLevel.String(), "trace|debug|info|error|fatal|panic|disabled")
+	flag.String("store", "/var/run/auditor/notifications.db", "Location for KV store")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
@@ -119,33 +131,57 @@ func main() {
 	}
 }
 
-type ConfigChecks struct {
-	Checks []map[string]string `mapstructure:"checks"`
+type Checks []Check
+
+type Check struct {
+	Name string `mapstructure:"name"`
+	Type string `mapstructure:"type"`
+}
+
+type Repay struct {
+	Name  string `mapstructure:"name"`
+	Match string `mapstructure:"match"`
+	Days  int    `mapstructure:"days"`
+	From  string `mapstructure:"from"`
+	To    string `mapstructure:"to"`
+}
+
+type Amount struct {
+	Name      string  `mapstructure:"name"`
+	Match     string  `mapstructure:"match"`
+	Days      int     `mapstructure:"days"`
+	Expected  float64 `mapstructure:"expected"`
+	Threshold string  `mapstructure:"threshold"`
+	Rrule     string  `mapstructure:"rrule"`
 }
 
 func RunChecks() error {
-	var checks []map[string]string
+	var checks Checks
+
 	viper.UnmarshalKey("checks", &checks)
-	for _, check := range checks {
-		log.Info().Msgf("Checking: %s (%s)", check["match"], check["type"])
-		days, _ := strconv.Atoi(check["days"])
-		message := string("")
-		switch check["type"] {
+	for i, check := range checks {
+
+		log.Info().Msgf("Checking: %s (%s)", check.Name, check.Type)
+		var message string
+		switch check.Type {
 		case "repay":
 			var err error
-			message, err = CheckRepay(check["match"], check["from"], check["to"], days)
+			var c Repay
+			viper.UnmarshalKey(fmt.Sprintf("checks.%d", i), &c)
+			message, err = CheckRepay(c)
 			if err != nil {
 				return err
 			}
 		case "amount":
 			var e error
-			expected, _ := strconv.ParseFloat(check["expected"], 64)
-			message, e = CheckAmount(check["match"], expected, check["threshold"], days)
+			var c Amount
+			viper.UnmarshalKey(fmt.Sprintf("checks.%d", i), &c)
+			message, e = CheckAmount(c)
 			if e != nil {
 				return e
 			}
 		default:
-			return errors.New("Invalid check type: " + check["type"])
+			return errors.New("Invalid check type: " + check.Type)
 		}
 		if message != "" {
 			err := Notify(message)
@@ -177,8 +213,16 @@ func QueryBackend(params map[string]string) (result APIResponse, err error) {
 		Query:  params,
 		Method: "GET",
 	}
+	p := url.Values{}
+	for k, v := range params {
+		p.Set(k, v)
+	}
+
+	log.Trace().Str("params", p.Encode()).Msg("Query backend")
 
 	check := client.Send()
+
+	//check.Response().Request.URL
 
 	if !check.OK() {
 		err = check.Error()
@@ -197,23 +241,32 @@ func QueryBackend(params map[string]string) (result APIResponse, err error) {
 	return
 }
 
-func CheckAmount(match string, expected float64, threshold string, days int) (msg string, err error) {
-	past := time.Now().AddDate(0, 0, days*-1)
+func CheckAmount(c Amount) (msg string, err error) {
+	past := time.Now().AddDate(0, 0, -c.Days)
+	if c.Rrule != "" {
+		rr, err := rrule.StrToRRule(c.Rrule)
+		if err != nil {
+			log.Error().Err(err).Msgf("Unable to parse rrule '%s'", c.Rrule)
+			return "", fmt.Errorf("rrule invalid")
+		}
+
+		past = rr.Before(time.Now(), true).AddDate(0, 0, -c.Days)
+	}
+
 	thresh := 0.0
 	params := map[string]string{
-		"description__like": match,
+		"description__like": c.Match,
 		"created__gt":       past.Format("2006-01-02T15:04:05"),
 	}
-	if threshold == "" {
-		params["amount__ne"] = fmt.Sprintf("%0.2f", expected)
-	} else if strings.Contains(threshold, "%") {
-		t, _ := strconv.ParseFloat(strings.Replace(threshold, "%", "", 1), 64)
-		thresh = math.Abs(expected * (t / 100.0))
-		params["amount__lt"] = fmt.Sprintf("%0.2f", expected-thresh)
-
+	if c.Threshold == "" {
+		params["amount__ne"] = fmt.Sprintf("%0.2f", c.Expected)
+	} else if strings.Contains(c.Threshold, "%") {
+		t, _ := strconv.ParseFloat(strings.Replace(c.Threshold, "%", "", 1), 64)
+		thresh = math.Abs(c.Expected * (t / 100.0))
+		params["amount__lt"] = fmt.Sprintf("%0.2f", c.Expected-thresh)
 	} else {
-		thresh, _ = strconv.ParseFloat(strings.Replace(threshold, "$", "", 1), 64)
-		params["amount__lt"] = fmt.Sprintf("%0.2f", expected-math.Abs(thresh))
+		thresh, _ = strconv.ParseFloat(strings.Replace(c.Threshold, "$", "", 1), 64)
+		params["amount__lt"] = fmt.Sprintf("%0.2f", c.Expected-math.Abs(thresh))
 
 	}
 
@@ -231,7 +284,7 @@ func CheckAmount(match string, expected float64, threshold string, days int) (ms
 				t.Created.Format("Mon 2 Jan"),
 				t.Description,
 				math.Abs(float64(t.Amount)),
-				math.Abs(expected),
+				math.Abs(c.Expected),
 			)
 		}
 	}
@@ -239,10 +292,10 @@ func CheckAmount(match string, expected float64, threshold string, days int) (ms
 	return
 }
 
-func CheckRepay(match string, from string, to string, days int) (msg string, err error) {
-	past := time.Now().AddDate(0, 0, days*-1)
+func CheckRepay(c Repay) (msg string, err error) {
+	past := time.Now().AddDate(0, 0, c.Days*-1)
 	params := map[string]string{
-		"description__like": match,
+		"description__like": c.Match,
 		"created__gt":       past.Format("2006-01-02T15:04:05"),
 		"amount__lt":        "0.00",
 	}
@@ -256,7 +309,7 @@ func CheckRepay(match string, from string, to string, days int) (msg string, err
 	for _, transaction := range response.Data {
 		p := map[string]string{
 			"created__gt":       transaction.Created.Format("2006-01-02T15:04:05"),
-			"description__like": from,
+			"description__like": c.From,
 			"amount":            fmt.Sprintf("%0.2f", transaction.Amount*-1),
 		}
 
@@ -277,7 +330,7 @@ func CheckRepay(match string, from string, to string, days int) (msg string, err
 		log.Info().Msgf("Transactions: %d/%d repaid", found-unpaid, found)
 	}
 	if len(result) > 0 {
-		msg = fmt.Sprintf("Move money from %s to %s:", from, to)
+		msg = fmt.Sprintf("Move money from %s to %s:", c.From, c.To)
 		for _, row := range result {
 			msg = fmt.Sprintf("%s\n%s", msg, row)
 		}
@@ -305,14 +358,18 @@ type Settings struct {
 }
 
 func Notify(message string) (err error) {
-	if viper.GetBool("dryrun") {
-		log.Info().Msgf("(DRYRUN) SMS : %s", message)
-		return nil
+	var settings *Settings
+	var store *skv.KVStore
+
+	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(ageHookFunc(ageKey))); err != nil || settings == nil {
+		log.Error().Err(err).Msg("Unable to load notify config")
+		return fmt.Errorf("unable to load settings")
 	}
 
-	var settings *Settings
-	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(ageHookFunc(ageKey))); err != nil {
-		log.Error().Err(err).Msg("Unable to load notify config")
+	store, err = skv.Open(viper.GetString("store"))
+	if err != nil {
+		log.Error().Err(err).Msg("Unable to init KV store")
+		return fmt.Errorf("unable to init kv store")
 	}
 
 	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + settings.Sid + "/Messages"
@@ -323,6 +380,12 @@ func Notify(message string) (err error) {
 			"From": "Budget",
 			"Body": message,
 		}
+		hash := fmt.Sprintf("%x", md5.Sum([]byte(fmt.Sprintf("%v", body))))
+		if err := store.Get(hash, nil); err == nil {
+			log.Info().Str("hash", hash).Msgf("Message already sent to %s", m)
+			continue
+		}
+		store.Put(hash, m)
 		client := request.Client{
 			Method: "POST",
 			URL:    endpoint,
@@ -331,6 +394,11 @@ func Notify(message string) (err error) {
 				Password: settings.Token,
 			},
 			URLEncodedForm: body,
+		}
+
+		if viper.GetBool("dryrun") {
+			log.Info().Msgf("(DRYRUN) SMS : %s", message)
+			continue
 		}
 		resp := client.Send()
 
@@ -348,5 +416,5 @@ func Notify(message string) (err error) {
 			return errors.New("twilio responded with failure")
 		}
 	}
-	return errors.New("no mobiles to send to")
+	return nil
 }

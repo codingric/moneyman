@@ -4,6 +4,8 @@ metadata:
   name: moneyman-auditor
 spec:
   schedule: "00 9,23 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
   jobTemplate:
     spec:
       template:
@@ -18,7 +20,7 @@ spec:
                 - "--agekey"
                 - "/etc/auditor/age.key"
                 - "--loglevel"
-                - "debug"
+                - "trace"
               imagePullPolicy: Always
               volumeMounts:
                 - mountPath: "/etc/auditor/config.yaml"
@@ -29,6 +31,15 @@ spec:
                   name: age
                   readOnly: true
                   subPath: age.key
+                - name: skv
+                  mountPath: /var/run/auditor/
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 62Mib
+                limits:
+                  cpu: 200m
+                  memory: 256Mib
           volumes:
             - name: config
               configMap:
@@ -36,4 +47,18 @@ spec:
             - name: age
               secret:
                 secretName: moneyman-age-key
+            - name: skv
+              persistentVolumeClaim:
+                claimName: auditor-skv
           restartPolicy: Never
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: auditor-skv
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -15,7 +16,10 @@ import (
 	"time"
 
 	"bou.ke/monkey"
+	"filippo.io/age"
 	"github.com/jarcoal/httpmock"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -72,6 +76,12 @@ notify:
   mobiles:
     - +61412345678`)
 
+type MockRoundTripper func(req *http.Request) (res *http.Response, err error)
+
+func (m MockRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
+	return m(req)
+}
+
 func SetUpConfig() {
 
 	viper.SetConfigType("yaml") // or viper.SetConfigType("YAML")
@@ -79,6 +89,8 @@ func SetUpConfig() {
 	viper.ReadConfig(bytes.NewBuffer(config))
 	viper.RegisterAlias("verbose", "v")
 	viper.Set("verbose", false)
+
+	log.Logger.Level(zerolog.FatalLevel)
 }
 
 var (
@@ -165,31 +177,66 @@ func TestMain(m *testing.M) {
 }
 
 func TestNotify(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	SetMockTwilio()
+	config_no_store := `
+notify:
+  sid: "sometihng"
+  token: "something"
+  mobiles:
+  - "+6140000000"`
+	config := `
+notify:
+  sid: "sometihng"
+  token: "something"
+  mobiles:
+  - "+6140000000"
+store: "/tmp/store.db"`
+	type F struct {
+		config  string
+		message string
+		store   error
+	}
+	type E struct {
+		err error
+	}
+	type T struct {
+		name    string
+		fixture F
+		expect  E
+	}
+	tests := []T{
+		{
+			name:    "No config",
+			fixture: F{``, "no config", nil},
+			expect:  E{fmt.Errorf("unable to load settings")},
+		},
+		{
+			name:    "No store",
+			fixture: F{config_no_store, "no store", nil},
+			expect:  E{fmt.Errorf("unable to init kv store")},
+		},
+		{
+			name:    "Exist store",
+			fixture: F{config, "no store", nil},
+			expect:  E{},
+		},
+	}
 
-	err := Notify("mockmessage")
-	assert.Nil(t, err)
-}
+	for _, test := range tests {
+		t.Run(test.name, func(tt *testing.T) {
+			viper.ReadConfig(bytes.NewBuffer([]byte(test.fixture.config)))
 
-func TestNotifyFailOnException(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	SetMockTwilio()
+			monkey.Patch(decodeAge, func(s string, a *age.X25519Identity) string { return s })
 
-	err := Notify("failure")
-	assert.NotNil(t, err)
-}
-
-func TestNotifyFailOnAuth(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	SetMockTwilio()
-
-	viper.Set("notify.token", "xxx")
-	err := Notify("mockmessage")
-	assert.NotNil(t, err)
+			err := Notify(test.fixture.message)
+			if test.expect.err != nil {
+				if assert.NotNil(tt, err) {
+					assert.Equal(tt, test.expect.err, err)
+				}
+			} else {
+				assert.Nil(tt, err)
+			}
+		})
+	}
 }
 
 func TestRunChecks(t *testing.T) {
@@ -302,10 +349,10 @@ func TestRunChecks(t *testing.T) {
 
 			viper.ReadConfig(bytes.NewBuffer([]byte(test.config)))
 
-			monkey.Patch(CheckRepay, func(match string, from string, to string, days int) (msg string, err error) {
+			monkey.Patch(CheckRepay, func(r Repay) (msg string, err error) {
 				checkreplay_called++
 				if test.crp != nil {
-					params := CRP{match, from, to, days}
+					params := CRP{r.Match, r.From, r.To, r.Days}
 					assert.Equal(st, *test.crp, params, "CheckRepay params")
 				}
 				if test.crr != nil {
@@ -326,10 +373,10 @@ func TestRunChecks(t *testing.T) {
 				}
 				return
 			})
-			monkey.Patch(CheckAmount, func(match string, expected float64, threshold string, days int) (msg string, err error) {
+			monkey.Patch(CheckAmount, func(c Amount) (msg string, err error) {
 				checkamount_called++
 				if test.cap != nil {
-					params := CAP{match, expected, threshold, days}
+					params := CAP{c.Match, c.Expected, c.Threshold, c.Days}
 					assert.Equal(st, *test.cap, params, "CheckAmount params")
 				}
 				if test.car != nil {
@@ -338,9 +385,7 @@ func TestRunChecks(t *testing.T) {
 				}
 				return
 			})
-			defer monkey.Unpatch(CheckRepay)
-			defer monkey.Unpatch(CheckAmount)
-			defer monkey.Unpatch(Notify)
+			defer monkey.UnpatchAll()
 			err := RunChecks()
 
 			if test.err == nil {
@@ -502,7 +547,7 @@ func TestRunCheckAmount(t *testing.T) {
 			})
 			defer monkey.Unpatch(QueryBackend)
 
-			result, err := CheckAmount(td.args.match, td.args.amount, td.args.threshold, td.args.days)
+			result, err := CheckAmount(Amount{Match: td.args.match, Days: td.args.days, Expected: td.args.amount, Threshold: td.args.threshold})
 			if td.error_message == "" {
 				assert.Nil(s, err)
 				assert.Equal(s, td.expected, result)
@@ -604,7 +649,7 @@ func TestCheckRepay(t *testing.T) {
 			})
 			defer monkey.Unpatch(QueryBackend)
 
-			result, err := CheckRepay(td.args.match, td.args.from, td.args.to, td.args.days)
+			result, err := CheckRepay(Repay{Match: td.args.match, Days: td.args.days, From: td.args.from, To: td.args.to})
 			if td.err == nil {
 				assert.Nil(s, err)
 				assert.Equal(s, td.expected, result)

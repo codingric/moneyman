@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -18,6 +18,7 @@ import (
 	"bou.ke/monkey"
 	"filippo.io/age"
 	"github.com/jarcoal/httpmock"
+	"github.com/rapidloop/skv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -177,26 +178,26 @@ func TestMain(m *testing.M) {
 }
 
 func TestNotify(t *testing.T) {
-	config_no_store := `
-notify:
-  sid: "sometihng"
-  token: "something"
-  mobiles:
-  - "+6140000000"`
 	config := `
 notify:
   sid: "sometihng"
   token: "something"
   mobiles:
   - "+6140000000"
-store: "/tmp/store.db"`
+store: "/tmp/test.db"`
+	type H struct {
+		body []byte
+		code int
+		err  error
+	}
 	type F struct {
 		config  string
 		message string
-		store   error
+		store   bool
+		twillio *H
 	}
 	type E struct {
-		err error
+		err string
 	}
 	type T struct {
 		name    string
@@ -206,17 +207,42 @@ store: "/tmp/store.db"`
 	tests := []T{
 		{
 			name:    "No config",
-			fixture: F{``, "no config", nil},
-			expect:  E{fmt.Errorf("unable to load settings")},
-		},
-		{
-			name:    "No store",
-			fixture: F{config_no_store, "no store", nil},
-			expect:  E{fmt.Errorf("unable to init kv store")},
+			fixture: F{``, "no config", false, nil},
+			expect:  E{"unable to load settings"},
 		},
 		{
 			name:    "Exist store",
-			fixture: F{config, "no store", nil},
+			fixture: F{config, "Exist store", true, nil},
+			expect:  E{},
+		},
+		{
+			name:    "HTTP error",
+			fixture: F{config, "HTTP error", false, &H{err: errors.New("something went wrong")}},
+			expect:  E{"failed to make request"},
+		},
+		{
+			name:    "Auth error",
+			fixture: F{config, "HTTP error", false, &H{code: 401, body: []byte("")}},
+			expect:  E{"authentication failure"},
+		},
+		{
+			name:    "XML error",
+			fixture: F{config, "Other error", false, &H{code: 400, body: []byte(`<TwilioResponse><RestException><Code>30000</Code><Detail></Detail><Message>Fake Error</Message><MoreInfo>fake.com</MoreInfo><Status>400</Status></RestException></TwilioResponse>`)}},
+			expect:  E{"Fake Error"},
+		},
+		{
+			name:    "Unmarshalble error",
+			fixture: F{config, "Unmarshalble error", false, &H{code: 400, body: []byte(`<<Tw~!!`)}},
+			expect:  E{"failed to read responses"},
+		},
+		{
+			name:    "Other error",
+			fixture: F{config, "Other error", false, &H{code: 500, body: []byte("Server Error")}},
+			expect:  E{"twilio responded with failure"},
+		},
+		{
+			name:    "Happy",
+			fixture: F{config, "Happy path", false, &H{code: 201, body: []byte("OK")}},
 			expect:  E{},
 		},
 	}
@@ -224,16 +250,25 @@ store: "/tmp/store.db"`
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
 			viper.ReadConfig(bytes.NewBuffer([]byte(test.fixture.config)))
-
+			skvStore = &skv.KVStore{}
+			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
+				return &http.Response{StatusCode: test.fixture.twillio.code, Body: io.NopCloser(bytes.NewBuffer(test.fixture.twillio.body))}, test.fixture.twillio.err
+			})}
 			monkey.Patch(decodeAge, func(s string, a *age.X25519Identity) string { return s })
+			monkey.PatchInstanceMethod(reflect.TypeOf((*skv.KVStore)(nil)), "Get", func(*skv.KVStore, string, interface{}) error {
+				if test.fixture.store {
+					return nil
+				}
+				return errors.New("")
+			})
+			monkey.PatchInstanceMethod(reflect.TypeOf((*skv.KVStore)(nil)), "Put", func(*skv.KVStore, string, interface{}) error { return nil })
 
 			err := Notify(test.fixture.message)
-			if test.expect.err != nil {
-				if assert.NotNil(tt, err) {
-					assert.Equal(tt, test.expect.err, err)
-				}
-			} else {
+			if test.expect.err == "" {
 				assert.Nil(tt, err)
+			} else {
+				assert.Error(tt, err)
+				assert.EqualError(tt, err, test.expect.err)
 			}
 		})
 	}

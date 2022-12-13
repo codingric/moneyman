@@ -33,10 +33,19 @@ import (
 var (
 	ageKey     *age.X25519Identity
 	httpClient *http.Client
+	skvStore   *skv.KVStore
 )
 
 func init() {
 	httpClient = &http.Client{}
+}
+
+func initStore() {
+	var err error
+	skvStore, err = skv.Open(viper.GetString("store"))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Unable to init KV store")
+	}
 }
 
 func LoadConf() {
@@ -366,52 +375,55 @@ func Notify(message string) (err error) {
 		return fmt.Errorf("unable to load settings")
 	}
 
-	store, err = skv.Open(viper.GetString("store"))
-	if err != nil {
-		log.Error().Err(err).Msg("Unable to init KV store")
-		return fmt.Errorf("unable to init kv store")
+	if skvStore == nil {
+		initStore()
 	}
 
 	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + settings.Sid + "/Messages"
 
 	for _, m := range settings.Mobiles {
-		body := map[string]string{
-			"To":   m,
-			"From": "Budget",
-			"Body": message,
+		body := url.Values{
+			"To":   []string{m},
+			"From": []string{"Budget"},
+			"Body": []string{message},
 		}
-		hash := fmt.Sprintf("%x", md5.Sum([]byte(fmt.Sprintf("%v", body))))
+
+		hash := fmt.Sprintf("%x", md5.Sum([]byte(body.Encode())))
 		if err := store.Get(hash, nil); err == nil {
 			log.Info().Str("hash", hash).Msgf("Message already sent to %s", m)
 			continue
 		}
 		store.Put(hash, m)
-		client := request.Client{
-			Method: "POST",
-			URL:    endpoint,
-			BasicAuth: request.BasicAuth{
-				Username: settings.Sid,
-				Password: settings.Token,
-			},
-			URLEncodedForm: body,
-		}
+
+		req, _ := http.NewRequest("POST", endpoint, strings.NewReader(body.Encode()))
+		req.SetBasicAuth(settings.Sid, settings.Token)
 
 		if viper.GetBool("dryrun") {
 			log.Info().Msgf("(DRYRUN) SMS : %s", message)
 			continue
 		}
-		resp := client.Send()
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			log.Error().Err(err).Msgf("Failed to make request")
+			return fmt.Errorf("failed to make request")
+		}
 
-		switch resp.Response().StatusCode {
+		switch resp.StatusCode {
 		case 201:
 			log.Debug().Msg("Sent SMS Successfully")
 			return nil
 		case 401:
 			return errors.New("authentication failure")
 		case 400:
-			var xml TwilioResponse
-			resp.ScanXML(&xml)
-			return errors.New(xml.RestException.Message)
+			var resp_xml TwilioResponse
+			var resp_body []byte
+			resp_body, _ = io.ReadAll(resp.Body)
+			err = xml.Unmarshal(resp_body, &resp_xml)
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to read response")
+				return fmt.Errorf("failed to read responses")
+			}
+			return errors.New(resp_xml.RestException.Message)
 		default:
 			return errors.New("twilio responded with failure")
 		}

@@ -379,7 +379,6 @@ type Settings struct {
 
 func Notify(message string) (err error) {
 	var settings *Settings
-	var store *skv.KVStore
 
 	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(ageHookFunc(ageKey))); err != nil || settings == nil {
 		log.Error().Err(err).Msg("Unable to load notify config")
@@ -400,11 +399,11 @@ func Notify(message string) (err error) {
 		}
 
 		hash := fmt.Sprintf("%x", md5.Sum([]byte(body.Encode())))
-		if err := store.Get(hash, nil); err == nil {
+		if err := skvStore.Get(hash, nil); err == nil {
 			log.Info().Str("hash", hash).Msgf("Message already sent to %s", m)
 			continue
 		}
-		store.Put(hash, m)
+		skvStore.Put(hash, m)
 
 		req, _ := http.NewRequest("POST", endpoint, strings.NewReader(body.Encode()))
 		req.SetBasicAuth(settings.Sid, settings.Token)

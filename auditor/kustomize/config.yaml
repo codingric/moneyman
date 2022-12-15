@@ -1,7 +1,7 @@
 checks:
   - type: amount
     name: Gowrie Daycare
-    expected: 994.86
+    expected: -994.86
     days: 1
     match: Gowrie
     rrule: FREQ=WEEKLY;INTERVAL=2;WKST=TH;DTSTART=20220714T000000Z

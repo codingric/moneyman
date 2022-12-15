@@ -21,6 +21,8 @@ spec:
                 - "/etc/auditor/age.key"
                 - "--loglevel"
                 - "trace"
+                - "--store"
+                - "/var/run/auditor/store.db"
               imagePullPolicy: Always
               volumeMounts:
                 - mountPath: "/etc/auditor/config.yaml"

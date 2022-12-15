@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"flag"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -21,7 +23,6 @@ import (
 
 	"filippo.io/age"
 	"github.com/mitchellh/mapstructure"
-	"github.com/monaco-io/request"
 	"github.com/rapidloop/skv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -51,6 +52,7 @@ func initStore() {
 func LoadConf() {
 	flag.Bool("dryrun", false, "Log instead of SMS")
 	flag.String("agekey", "/etc/auditor/age.key", "Age key")
+	flag.String("config", "/etc/auditor/config.yaml", "Config yaml")
 	flag.String("loglevel", zerolog.ErrorLevel.String(), "trace|debug|info|error|fatal|panic|disabled")
 	flag.String("store", "/var/run/auditor/notifications.db", "Location for KV store")
 
@@ -58,13 +60,19 @@ func LoadConf() {
 	pflag.Parse()
 	viper.BindPFlags(pflag.CommandLine)
 
-	viper.SetConfigName("config")
+	cpath := viper.GetString("config")
+
+	fpath, fname := filepath.Split(cpath)
+	fex := filepath.Ext(fname)
+	fname = strings.TrimSuffix(fname, fex)
+
+	viper.SetConfigName(fname)
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
-	viper.AddConfigPath("/etc/auditor/")
+	viper.AddConfigPath(fpath)
 	err := viper.ReadInConfig()
 	if err != nil {
-		log.Fatal().Msgf("Unable to read config: %v", err)
+		log.Fatal().Err(err).Msgf("Unable to read config: `%s`", cpath)
 	}
 
 	lvl := zerolog.InfoLevel
@@ -76,17 +84,17 @@ func LoadConf() {
 	zerolog.SetGlobalLevel(lvl)
 	log.Info().Msgf("Config loaded: `%s`", viper.ConfigFileUsed())
 
-	ageKey, err = loadAgeKey(viper.GetString("agekey"))
+	b, err := os.ReadFile(viper.GetString("agekey")) // just pass the file name
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Failed to open age key: `%s`", viper.GetString("agekey"))
+	}
+	ageKey, err = loadAgeKey(b)
 	if err != nil {
 		log.Fatal().Msgf("Unable to load age key: %s", err.Error())
 	}
 }
 
-func loadAgeKey(p string) (a *age.X25519Identity, e error) {
-	b, err := os.ReadFile(p) // just pass the file name
-	if err != nil {
-		return nil, err
-	}
+func loadAgeKey(b []byte) (a *age.X25519Identity, e error) {
 	// Remove comments
 	re := regexp.MustCompile(`(s?)#.*\n`)
 	c := re.ReplaceAll(b, nil)
@@ -173,14 +181,14 @@ func RunChecks() error {
 		log.Info().Msgf("Checking: %s (%s)", check.Name, check.Type)
 		var message string
 		switch check.Type {
-		case "repay":
-			var err error
-			var c Repay
-			viper.UnmarshalKey(fmt.Sprintf("checks.%d", i), &c)
-			message, err = CheckRepay(c)
-			if err != nil {
-				return err
-			}
+		// case "repay":
+		// 	var err error
+		// 	var c Repay
+		// 	viper.UnmarshalKey(fmt.Sprintf("checks.%d", i), &c)
+		// 	message, err = CheckRepay(c)
+		// 	if err != nil {
+		// 		return err
+		// 	}
 		case "amount":
 			var e error
 			var c Amount
@@ -217,34 +225,34 @@ type APITransaction struct {
 }
 
 func QueryBackend(params map[string]string) (result APIResponse, err error) {
-	client := request.Client{
-		URL:    viper.GetString("backend"),
-		Query:  params,
-		Method: "GET",
-	}
+
 	p := url.Values{}
 	for k, v := range params {
 		p.Set(k, v)
 	}
-
+	url_ := fmt.Sprintf("%s?%s", viper.GetString("backend"), p.Encode())
+	req, _ := http.NewRequest("GET", url_, nil)
 	log.Trace().Str("params", p.Encode()).Msg("Query backend")
 
-	check := client.Send()
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to query backend")
+		return
+	}
+	defer resp.Body.Close()
+	var resp_body []byte
+	resp_body, _ = io.ReadAll(resp.Body)
 
-	//check.Response().Request.URL
-
-	if !check.OK() {
-		err = check.Error()
+	if resp.StatusCode != 200 {
+		err = errors.New(strings.ToLower(string(resp_body)))
+		log.Error().Err(err).Int("status", resp.StatusCode).Msg("Query returned non 200")
 		return
 	}
 
-	if check.Response().StatusCode != 200 {
-		err = errors.New(strings.ToLower(check.String()))
-		return
-	}
-
-	if !check.Scan(&result).OK() {
-		err = check.Error()
+	err = json.Unmarshal(resp_body, &result)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to pase query result")
+		err = errors.New("Failed not parse result")
 		return
 	}
 	return
@@ -259,7 +267,7 @@ func CheckAmount(c Amount) (msg string, err error) {
 			return "", fmt.Errorf("rrule invalid")
 		}
 
-		past = rr.Before(time.Now(), true).AddDate(0, 0, -c.Days)
+		past = rr.Before(time.Now(), false).AddDate(0, 0, -c.Days)
 	}
 
 	thresh := 0.0
@@ -272,16 +280,18 @@ func CheckAmount(c Amount) (msg string, err error) {
 	} else if strings.Contains(c.Threshold, "%") {
 		t, _ := strconv.ParseFloat(strings.Replace(c.Threshold, "%", "", 1), 64)
 		thresh = math.Abs(c.Expected * (t / 100.0))
-		params["amount__lt"] = fmt.Sprintf("%0.2f", c.Expected-thresh)
+		params["amount__lt"] = fmt.Sprintf("%0.2f", c.Expected+thresh)
+		params["amount__gt"] = fmt.Sprintf("%0.2f", c.Expected-thresh)
 	} else {
 		thresh, _ = strconv.ParseFloat(strings.Replace(c.Threshold, "$", "", 1), 64)
-		params["amount__lt"] = fmt.Sprintf("%0.2f", c.Expected-math.Abs(thresh))
-
+		params["amount__gt"] = fmt.Sprintf("%0.2f", c.Expected-math.Abs(thresh))
+		params["amount__lt"] = fmt.Sprintf("%0.2f", c.Expected+math.Abs(thresh))
 	}
 
 	response, err := QueryBackend(params)
 	if err != nil {
-		return
+		log.Error().Err(err).Msg("Failed to query backend")
+		return msg, err
 	}
 
 	if len(response.Data) > 0 {
@@ -301,49 +311,50 @@ func CheckAmount(c Amount) (msg string, err error) {
 	return
 }
 
+// past := time.Now().AddDate(0, 0, c.Days*-1)
+// params := map[string]string{
+// 	"description__like": c.Match,
+// 	"created__gt":       past.Format("2006-01-02T15:04:05"),
+// 	"amount__lt":        "0.00",
+// }
+// var result []string
+
+// response, err := QueryBackend(params)
+// if err != nil {
+// 	return
+// }
+
+// for _, transaction := range response.Data {
+// 	p := map[string]string{
+// 		"created__gt":       transaction.Created.Format("2006-01-02T15:04:05"),
+// 		"description__like": c.From,
+// 		"amount":            fmt.Sprintf("%0.2f", transaction.Amount*-1),
+// 	}
+
+// 	rr, err := QueryBackend(p)
+// 	if err != nil {
+// 		return msg, err
+// 	}
+
+// 	if len(rr.Data) == 0 {
+// 		m := fmt.Sprintf("$%0.2f from %s", transaction.Amount*-1, transaction.Created.Format("Mon 2 Jan"))
+// 		result = append(result, m)
+// 	}
+// }
+
+//	if len(response.Data) > 0 {
+//		unpaid := len(result)
+//		found := len(response.Data)
+//		log.Info().Msgf("Transactions: %d/%d repaid", found-unpaid, found)
+//	}
+//
+//	if len(result) > 0 {
+//		msg = fmt.Sprintf("Move money from %s to %s:", c.From, c.To)
+//		for _, row := range result {
+//			msg = fmt.Sprintf("%s\n%s", msg, row)
+//		}
+//	}
 func CheckRepay(c Repay) (msg string, err error) {
-	past := time.Now().AddDate(0, 0, c.Days*-1)
-	params := map[string]string{
-		"description__like": c.Match,
-		"created__gt":       past.Format("2006-01-02T15:04:05"),
-		"amount__lt":        "0.00",
-	}
-	var result []string
-
-	response, err := QueryBackend(params)
-	if err != nil {
-		return
-	}
-
-	for _, transaction := range response.Data {
-		p := map[string]string{
-			"created__gt":       transaction.Created.Format("2006-01-02T15:04:05"),
-			"description__like": c.From,
-			"amount":            fmt.Sprintf("%0.2f", transaction.Amount*-1),
-		}
-
-		rr, err := QueryBackend(p)
-		if err != nil {
-			return msg, err
-		}
-
-		if len(rr.Data) == 0 {
-			m := fmt.Sprintf("$%0.2f from %s", transaction.Amount*-1, transaction.Created.Format("Mon 2 Jan"))
-			result = append(result, m)
-		}
-	}
-
-	if len(response.Data) > 0 {
-		unpaid := len(result)
-		found := len(response.Data)
-		log.Info().Msgf("Transactions: %d/%d repaid", found-unpaid, found)
-	}
-	if len(result) > 0 {
-		msg = fmt.Sprintf("Move money from %s to %s:", c.From, c.To)
-		for _, row := range result {
-			msg = fmt.Sprintf("%s\n%s", msg, row)
-		}
-	}
 	return
 }
 
@@ -407,6 +418,7 @@ func Notify(message string) (err error) {
 			log.Error().Err(err).Msgf("Failed to make request")
 			return fmt.Errorf("failed to make request")
 		}
+		defer resp.Body.Close()
 
 		switch resp.StatusCode {
 		case 201:

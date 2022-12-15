@@ -3,79 +3,23 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"io"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"reflect"
-	"regexp"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"bou.ke/monkey"
 	"filippo.io/age"
-	"github.com/jarcoal/httpmock"
 	"github.com/rapidloop/skv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
-
-var success_resp = `{
-	"account_sid": "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-	"api_version": "2010-04-01",
-	"body": "This is the ship that made the Kessel Run in fourteen parsecs?",
-	"date_created": "Thu, 30 Jul 2015 20:12:31 +0000",
-	"date_sent": "Thu, 30 Jul 2015 20:12:33 +0000",
-	"date_updated": "Thu, 30 Jul 2015 20:12:33 +0000",
-	"direction": "outbound-api",
-	"error_code": null,
-	"error_message": null,
-	"from": "+15017122661",
-	"messaging_service_sid": "MGXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-	"num_media": "0",
-	"num_segments": "1",
-	"price": null,
-	"price_unit": null,
-	"sid": "SMXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-	"status": "sent",
-	"subresource_uris": {
-	  "media": "/2010-04-01/Accounts/ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/Messages/SMXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/Media.json"
-	},
-	"to": "+15558675310",
-	"uri": "/2010-04-01/Accounts/ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/Messages/SMXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.json"
-  }`
-
-func GetParams(target string) map[string]string {
-	matches := make(map[string]string)
-	re := regexp.MustCompile(`(?P<key>[\w]+)=(?P<value>[^\s&]+)`)
-	m := re.FindAllStringSubmatch(target, -1)
-	for _, k := range m {
-		matches[k[1]] = k[2]
-	}
-	return matches
-}
-
-var config = []byte(`checks:
-  - type: repay
-    days: 3
-    match: WOOLWORTHS
-    from: Food
-    to: Spending
-  - type: amount
-    expected: $65.00
-    threshold: 20%
-    match: pineapple
-backend: https://api.mock/api/transactions
-notify:
-  sid: mocksid
-  token: mocktoken
-  mobiles:
-    - +61412345678`)
 
 type MockRoundTripper func(req *http.Request) (res *http.Response, err error)
 
@@ -83,101 +27,98 @@ func (m MockRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err 
 	return m(req)
 }
 
-func SetUpConfig() {
-
-	viper.SetConfigType("yaml") // or viper.SetConfigType("YAML")
-
-	viper.ReadConfig(bytes.NewBuffer(config))
-	viper.RegisterAlias("verbose", "v")
-	viper.Set("verbose", false)
-
-	log.Logger.Level(zerolog.FatalLevel)
+type MockHook struct {
+	HookFunc func(e *zerolog.Event, level zerolog.Level, msg string)
 }
 
-var (
-	Transactions = []APITransaction{
-		{Id: 1, Description: "WOOLWORTHS", Amount: -1.11, Account: 1234, Created: time.Date(2000, time.January, 1, 0, 0, 1, 0, time.UTC)},
-		{Id: 2, Description: "WOOLWORTHS", Amount: -2.22, Account: 1234, Created: time.Date(2000, time.January, 2, 0, 0, 1, 0, time.UTC)},
-		{Id: 3, Description: "WOOLWORTHS", Amount: -3.33, Account: 1234, Created: time.Date(2000, time.January, 3, 0, 0, 1, 0, time.UTC)},
-		{Id: 4, Description: "Bill", Amount: -60.00, Account: 1234, Created: time.Date(2000, time.January, 3, 10, 0, 1, 0, time.UTC)},
-		{Id: 5, Description: "Salary", Amount: 800.00, Account: 1234, Created: time.Date(2000, time.January, 3, 14, 0, 1, 0, time.UTC)},
-		{Id: 6, Description: "Deposit from Food to Spending", Amount: 1.11, Account: 1234, Created: time.Date(2000, time.January, 4, 0, 0, 1, 0, time.UTC)},
+func (h MockHook) Run(e *zerolog.Event, level zerolog.Level, msg string) {
+	h.HookFunc(e, level, msg)
+}
+
+func TestLoadConf(t *testing.T) {
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	buf := bytes.NewBufferString("")
+	log.Logger = log.Output(buf)
+	key := `# created: 2022-12-14T09:40:56+11:00
+# public key: age176vjsyk43d46tf5hcttcxe4kumzjxw4zrncmvemuxnt0kfvv7ffq4u7mlw
+AGE-SECRET-KEY-1UNDK53VGXQXXY6KNF7D865UW7Y4ADEJTRUPMEX9499AWCTSELMQSNCJU8P`
+
+	keyfile, err := os.CreateTemp("/tmp", "testing*.key")
+	if err != nil {
+		log.Fatal().Err(err)
 	}
-)
+	keypath := keyfile.Name()
+	defer os.Remove(keypath)
+	io.WriteString(keyfile, key)
+	keyfile.Close()
 
-func FilterTransactions(m map[string]string) []APITransaction {
-	f := []APITransaction{}
-	for _, i := range Transactions {
-		if a, err := strconv.ParseFloat(m["amount"], 32); err == nil && i.Amount != float32(a) {
-			continue
-		}
-		if a, err := strconv.ParseFloat(m["amount__lt"], 32); err == nil && i.Amount >= float32(a) {
-			continue
-		}
-		if a, err := strconv.ParseFloat(m["amount__gt"], 32); err == nil && i.Amount <= float32(a) {
-			continue
-		}
-		if a, err := strconv.ParseFloat(m["amount__ne"], 32); err == nil && i.Amount == float32(a) {
-			continue
-		}
-		if id, err := strconv.ParseInt(m["id"], 10, 64); err == nil && i.Id != id {
-			continue
-		}
-		if c, err := time.Parse("2006-01-02T15:04:05", m["created__gt"]); err == nil && i.Created.Unix() <= c.Unix() {
-			continue
-		}
-		if c, err := time.Parse("2006-01-02T15:04:05", m["created__lt"]); err == nil && i.Created.Unix() >= c.Unix() {
-			continue
-		}
-		if m["description__like"] != "" && !strings.Contains(i.Description, m["description__like"]) {
-			continue
-		}
-		f = append(f, i)
+	conffile, err := os.CreateTemp("/tmp", "testing*.yaml")
+	if err != nil {
+		log.Fatal().Err(err)
 	}
-	return f
-}
+	confpath := conffile.Name()
+	defer os.Remove(conffile.Name())
+	io.WriteString(conffile, "notify:\n  sid: testsid")
+	conffile.Close()
 
-func MockedAPIResponder(req *http.Request) (*http.Response, error) {
-	url_, _ := url.QueryUnescape(req.URL.RequestURI())
-	m := GetParams(url_)
-	data := APIResponse{Data: FilterTransactions(m)}
-	resp, _ := httpmock.NewJsonResponse(200, data)
-	return resp, nil
-}
+	type E struct {
+		msg string
+	}
+	tests := []struct {
+		name    string
+		fixture []string
+		expect  E
+	}{
+		{
+			name:    "Rubbish values",
+			fixture: []string{"--config", "/nonexistant/nonexistant.yaml"},
+			expect:  E{msg: "fatal: Unable to read config: `/nonexistant/nonexistant.yaml`"},
+		},
+		{
+			name:    "invalid loglevel",
+			fixture: []string{"--config", confpath, "--loglevel", "invalid"},
+			expect:  E{msg: "error: Ignoring --loglevel"},
+		},
+		{
+			name:    "invalid key",
+			fixture: []string{"--config", confpath, "--loglevel", "debug", "--agekey", "/non/existant/age.key"},
+			expect:  E{msg: "fatal: Failed to open age key: `/non/existant/age.key`"},
+		},
+	}
 
-func SetMockFailureTransactions() {
-	httpmock.RegisterResponder("GET", "=~^https://api.mock/api/",
-		func(req *http.Request) (*http.Response, error) {
-			resp := httpmock.NewStringResponse(503, "Service Error")
-			return resp, nil
-		})
-}
+	for _, test := range tests {
+		t.Run(test.name, func(tt *testing.T) {
+			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-func SetMockTwilio() {
-	httpmock.RegisterResponder("POST", "https://api.twilio.com/2010-04-01/Accounts/mocksid/Messages",
-		func(req *http.Request) (*http.Response, error) {
-			v, _ := httputil.DumpRequest(req, true)
-			req_body := strings.Split(string(v), "\r\n")
-			if req_body[2] != "Authorization: Basic bW9ja3NpZDptb2NrdG9rZW4=" {
-				resp := httpmock.NewStringResponse(401, `<TwilioResponse><RestException><Code>20003</Code><Detail></Detail><Message>Authenticate</Message><MoreInfo>https://www.twilio.com/docs/errors/20003</MoreInfo><Status>401</Status></RestException></TwilioResponse>`)
-				return resp, nil
+			hooker := func(e *zerolog.Event, level zerolog.Level, msg string) {
+				switch level {
+				case zerolog.ErrorLevel, zerolog.FatalLevel:
+					monkey.Patch(os.Exit, func(int) {
+						panic(level.String() + ": " + msg)
+					})
+					panic(level.String() + ": " + msg)
+				}
 			}
-			if req_body[6] != "Body=mockmessage&From=Budget&To=61412345678" {
-				resp := httpmock.NewStringResponse(400, `<TwilioResponse><RestException><Code>30000</Code><Detail></Detail><Message>Fake Error</Message><MoreInfo>fake.com</MoreInfo><Status>400</Status></RestException></TwilioResponse>`)
-				return resp, nil
-			}
-			resp := httpmock.NewStringResponse(201, success_resp)
-			return resp, nil
-		})
-}
+			log.Logger = log.Logger.Hook(MockHook{HookFunc: hooker})
+			monkey.Patch(pflag.Parse, func() {
+				pflag.CommandLine.Parse(test.fixture)
+			})
 
-func TestMain(m *testing.M) {
-	SetUpConfig()
-	retCode := m.Run()
-	os.Exit(retCode)
+			defer monkey.UnpatchAll()
+			if test.expect.msg != "" {
+				assert.PanicsWithValue(tt, test.expect.msg, func() { LoadConf() })
+				//assert.Equal(tt, test.expect.panic, fatal())
+			} else {
+				assert.NotPanics(tt, func() { LoadConf() })
+			}
+		})
+
+	}
+
 }
 
 func TestNotify(t *testing.T) {
+	zerolog.SetGlobalLevel(zerolog.Disabled)
 	config := `
 notify:
   sid: "sometihng"
@@ -249,6 +190,8 @@ store: "/tmp/test.db"`
 
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
+			defer monkey.UnpatchAll()
+			viper.SetConfigType("yaml")
 			viper.ReadConfig(bytes.NewBuffer([]byte(test.fixture.config)))
 			skvStore = &skv.KVStore{}
 			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
@@ -274,426 +217,416 @@ store: "/tmp/test.db"`
 	}
 }
 
-func TestRunChecks(t *testing.T) {
-	type CRP struct {
-		match string
-		from  string
-		to    string
-		days  int
+func TestQueryBackend(t *testing.T) {
+	type H struct {
+		body   string
+		status int
+		err    error
 	}
-	type CRR struct {
-		msg string
-		err error
+	type E struct {
+		result *APIResponse
+		err    string
 	}
-	type NP struct{ message string }
-	type NR struct{ err error }
-	type CAP struct {
-		match     string
-		expected  float64
-		threshold string
-		days      int
-	}
-	type CAR struct {
-		msg string
-		err error
+	test_data := []struct {
+		name     string
+		http     H
+		expected E
+	}{
+		{
+			"HTTP Err",
+			H{err: errors.New("http error")},
+			E{err: "Get \"fake.com?param=value\": http error"},
+		},
+		{
+			"HTTP !200",
+			H{status: 400, body: "Something went wrong"},
+			E{err: "something went wrong"},
+		},
+		{
+			"Invalid JSON",
+			H{status: 200, body: "{Non_'Json"},
+			E{err: "Failed not parse result"},
+		},
+		{
+			"Happy",
+			H{status: 200, body: `{"data":[{"id":1,"description":"test","amount":1.0,"account":1234567890,"created":"2000-01-01T00:00:00+11:00"}]}`},
+			E{result: &APIResponse{Data: []APITransaction{{Id: 1, Description: "test", Amount: 1, Account: 1234567890, Created: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.Local)}}}},
+		},
 	}
 
-	configs := map[string]string{"empty": "", "replay": `checks:
-  - type: repay
-    days: 3
-    match: WOOLWORTHS
-    from: Food
-    to: Spending`, "amount": `checks:
+	for _, test := range test_data {
+		t.Run(test.name, func(tt *testing.T) {
+			viper.Set("backend", "fake.com")
+			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
+				if test.http.body != "" {
+					res = &http.Response{Body: io.NopCloser(bytes.NewBufferString(test.http.body)), StatusCode: test.http.status}
+				}
+				err = test.http.err
+				return
+			})}
+
+			result, err := QueryBackend(map[string]string{"param": "value"})
+			if test.expected.err != "" {
+				if assert.NotNil(tt, err) {
+					assert.Equal(tt, test.expected.err, err.Error())
+				}
+			}
+			if test.expected.result != nil {
+				if assert.NotNil(tt, result) {
+					assert.Equal(tt, *test.expected.result, result)
+				}
+			}
+		})
+	}
+}
+
+func TestRunCheckAmount(t *testing.T) {
+	type E struct {
+		result string
+		err    string
+		params map[string]string
+	}
+
+	type Q struct {
+		err    error
+		result APIResponse
+	}
+
+	type F struct {
+		args  Amount
+		query Q
+	}
+
+	test_data := []struct {
+		name     string
+		fixture  F
+		expected E
+	}{
+		{
+			"Basic",
+			F{args: Amount{Match: "Basic"}},
+			E{
+				params: map[string]string{"amount__ne": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "Basic"},
+			},
+		},
+		{
+			"Invalid Rrule",
+			F{args: Amount{Rrule: "xs#$"}},
+			E{
+				err: "rrule invalid",
+			},
+		},
+		{
+			"RRule",
+			F{args: Amount{Match: "RRule", Rrule: "FREQ=WEEKLY;DTSTART=19991201T000000Z"}},
+			E{
+				params: map[string]string{"amount__ne": "0.00", "created__gt": "1999-12-29T00:00:00", "description__like": "RRule"},
+			},
+		},
+		{
+			"Days",
+			F{args: Amount{Match: "Days", Days: 3}},
+			E{
+				params: map[string]string{"amount__ne": "0.00", "created__gt": "1999-12-29T00:00:00", "description__like": "Days"},
+			},
+		},
+		{
+			"Threshold",
+			F{args: Amount{Match: "Threshold", Threshold: "10", Expected: 100.0}},
+			E{
+				params: map[string]string{"amount__gt": "90.00", "amount__lt": "110.00", "created__gt": "2000-01-01T00:00:00", "description__like": "Threshold"},
+			},
+		},
+		{
+			"Threshold Percentage",
+			F{args: Amount{Match: "Threshold", Threshold: "10%", Expected: 1000.0}},
+			E{
+				params: map[string]string{"amount__gt": "900.00", "amount__lt": "1100.00", "created__gt": "2000-01-01T00:00:00", "description__like": "Threshold"},
+			},
+		},
+		{
+			"QueryError",
+			F{query: Q{err: errors.New("something went wrong")}},
+			E{
+				err: "something went wrong",
+			},
+		},
+		{
+			"Result",
+			F{query: Q{result: APIResponse{Data: []APITransaction{{Amount: 1.0}}}}},
+			E{
+				result: "Unexpected amounts:\nMon 1 Jan  for $1.00 expecting $0.00",
+			},
+		},
+	}
+
+	for _, test := range test_data {
+		t.Run(test.name, func(tt *testing.T) {
+			defer monkey.UnpatchAll()
+			var called map[string]string
+			monkey.Patch(QueryBackend, func(p map[string]string) (a APIResponse, err error) {
+				called = map[string]string{}
+				for k, v := range p {
+					called[k] = v
+				}
+				a = test.fixture.query.result
+				err = test.fixture.query.err
+				return
+			})
+			monkey.Patch(time.Now, func() time.Time {
+				return time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+			})
+
+			result, err := CheckAmount(test.fixture.args)
+			assert.Equal(tt, test.expected.result, result)
+			if test.expected.params != nil {
+				if assert.NotNil(tt, called) {
+					assert.Equal(tt, test.expected.params, called)
+				}
+			}
+			if test.expected.err == "" {
+				assert.Nil(tt, err)
+			} else {
+				if assert.NotNil(tt, err) {
+					assert.Equal(tt, test.expected.err, err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestRunChecks(t *testing.T) {
+	type R struct {
+		result string
+		err    error
+	}
+	type F struct {
+		config      string
+		checkamount R
+		notify      R
+	}
+	type E struct {
+		err         string
+		checkamount Amount
+		notify      string
+	}
+
+	configs := map[string]string{
+		"empty": "",
+		"amount": `checks:
   - type: amount
+    name: test
     expected: 65.00
     threshold: 20%
     match: pineapple
-    days: 3`, "invalid": `checks:
-  - type: invalid`}
-
-	S := func(v string) *string { return &v }
+    days: 3`,
+		"invalid": `checks:
+  - type: invalid`,
+		"error": "*}}--ss",
+	}
 
 	tests := []struct {
-		name   string
-		config string
-		err    *string
-		crp    *CRP
-		crr    *CRR
-		cap    *CAP
-		car    *CAR
-		np     *NP
-		nr     *NR
-		crc    int
-		cac    int
-		nc     int
+		name    string
+		fixture F
+		expect  E
 	}{
 		{
-			name:   "EmptyConfig",
-			config: configs["empty"],
+			name:    "EmptyConfig",
+			fixture: F{config: configs["empty"]},
+			expect:  E{},
 		},
 		{
-			name:   "ReplaySuccess",
-			config: configs["replay"],
-			crp:    &CRP{"WOOLWORTHS", "Food", "Spending", 3},
-			crr:    &CRR{"CheckReplay", nil},
-			np:     &NP{"CheckReplay"},
-			crc:    1, nc: 1,
+			name: "ErrorAmount",
+			fixture: F{
+				config:      configs["amount"],
+				checkamount: R{err: errors.New("something failed")},
+			},
+			expect: E{
+				err:         "something failed",
+				checkamount: Amount{Name: "test", Match: "pineapple", Days: 3, Expected: 65, Threshold: "20%", Rrule: ""},
+			},
 		},
 		{
-			name:   "ReplayFailure",
-			config: configs["replay"],
-			crr:    &CRR{"", errors.New("CheckReplay")},
-			crc:    1,
-			err:    S("CheckReplay"),
+			name: "InvalidType",
+			fixture: F{
+				config: configs["invalid"],
+			},
+			expect: E{err: "Invalid check type: invalid"},
 		},
 		{
-			name:   "AmountSuccess",
-			config: configs["amount"],
-			cap:    &CAP{"pineapple", 65.00, "20%", 3},
-			cac:    1,
+			name: "NotifyError",
+			fixture: F{
+				config:      configs["amount"],
+				checkamount: R{result: "something OK"},
+				notify:      R{err: errors.New("notify failed")},
+			},
+			expect: E{
+				checkamount: Amount{Name: "test", Match: "pineapple", Days: 3, Expected: 65, Threshold: "20%", Rrule: ""},
+				notify:      "something OK",
+				err:         "notify failed",
+			},
 		},
 		{
-			name:   "AmountFailure",
-			config: configs["amount"],
-			car:    &CAR{"", errors.New("AmountFailure")},
-			err:    S("AmountFailure"),
-			cac:    1,
-		},
-		{
-			name:   "Invalid",
-			config: configs["invalid"],
-			err:    S("Invalid check type: invalid"),
-		},
-		{
-			name:   "NotifyFailure",
-			config: configs["replay"],
-			crr:    &CRR{"CheckReplay", nil},
-			nr:     &NR{errors.New("NotifyFailure")},
-			err:    S("NotifyFailure"),
-			crc:    1, nc: 1,
+			name: "OK",
+			fixture: F{
+				config:      configs["amount"],
+				checkamount: R{result: "something OK"},
+			},
+			expect: E{
+				checkamount: Amount{Name: "test", Match: "pineapple", Days: 3, Expected: 65, Threshold: "20%", Rrule: ""},
+				notify:      "something OK",
+			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(st *testing.T) {
 			var (
-				checkreplay_called int
-				notify_called      int
-				checkamount_called int
+				checkamount_params Amount
+				notify_params      string
 			)
+			viper.SetConfigType("yaml")
+			viper.ReadConfig(bytes.NewBufferString(test.fixture.config))
 
-			viper.ReadConfig(bytes.NewBuffer([]byte(test.config)))
-
-			monkey.Patch(CheckRepay, func(r Repay) (msg string, err error) {
-				checkreplay_called++
-				if test.crp != nil {
-					params := CRP{r.Match, r.From, r.To, r.Days}
-					assert.Equal(st, *test.crp, params, "CheckRepay params")
-				}
-				if test.crr != nil {
-					msg = test.crr.msg
-					err = test.crr.err
-				}
-				return
+			defer monkey.UnpatchAll()
+			monkey.Patch(CheckAmount, func(p Amount) (msg string, err error) {
+				checkamount_params = Amount(p)
+				return test.fixture.checkamount.result, test.fixture.checkamount.err
 			})
 			monkey.Patch(Notify, func(message string) (err error) {
-				notify_called++
-				if test.np != nil {
-					params := NP{message}
-					assert.Equal(st, *test.np, params, "Notify params")
-				}
+				notify_params = message
+				return test.fixture.notify.err
+			})
 
-				if test.nr != nil {
-					err = test.nr.err
-				}
-				return
-			})
-			monkey.Patch(CheckAmount, func(c Amount) (msg string, err error) {
-				checkamount_called++
-				if test.cap != nil {
-					params := CAP{c.Match, c.Expected, c.Threshold, c.Days}
-					assert.Equal(st, *test.cap, params, "CheckAmount params")
-				}
-				if test.car != nil {
-					msg = test.car.msg
-					err = test.car.err
-				}
-				return
-			})
-			defer monkey.UnpatchAll()
 			err := RunChecks()
 
-			if test.err == nil {
+			if test.expect.err == "" {
 				assert.Nil(st, err)
 			} else {
 				assert.NotNil(st, err)
 				if err != nil {
-					assert.Equal(st, *test.err, err.Error())
+					assert.Equal(st, test.expect.err, err.Error(), "Resulting error")
 				}
 			}
-			assert.Equal(st, test.crc, checkreplay_called, "checkreplay_called")
-			assert.Equal(st, test.cac, checkamount_called, "checkamount_called")
-			assert.Equal(st, test.nc, notify_called, "notify_called")
+			assert.Equal(st, test.expect.checkamount, checkamount_params, "CheckAmount parameters")
+			assert.Equal(st, test.expect.notify, notify_params, "Notify paramaters")
 		})
 	}
 }
 
-func MockAPIEmptyResponder(req *http.Request) (*http.Response, error) {
-	resp, err := httpmock.NewJsonResponse(200, APIResponse{})
-	return resp, err
+func TestAgeFunctions(t *testing.T) {
+	key := []byte(`# created: 2022-12-14T09:40:56+11:00
+# public key: age176vjsyk43d46tf5hcttcxe4kumzjxw4zrncmvemuxnt0kfvv7ffq4u7mlw
+AGE-SECRET-KEY-1UNDK53VGXQXXY6KNF7D865UW7Y4ADEJTRUPMEX9499AWCTSELMQSNCJU8P`)
+	a, err := loadAgeKey(key)
+	assert.Nil(t, err)
+	assert.NotNil(t, a)
+	assert.Equal(t, "age176vjsyk43d46tf5hcttcxe4kumzjxw4zrncmvemuxnt0kfvv7ffq4u7mlw", a.Recipient().String())
+
+	msg := `age:YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBKU2w4RmV5bndqMTJ3YW9oZi8rMm0xdjJ1N096VEVpekFsVzJaK2trM3kwCmtoMWQ1VElQUEovcWF3TnVSeXQ3b3l0WnZIOUdyZXU1aFl5WjBEK1pXdW8KLS0tIEdUcG0zUjNYWW5icGlPRFpITVNKcXY5MkVlZGdxR2VBTVNtMTI5Q0lvbGcK3TgMVBzvlx2f2/8xzmgW04VL1P83UyYdrODKq3TLinRgyTLFNd1xI08Sv0hEyio=`
+	dec := decodeAge(msg, a)
+	assert.Equal(t, "testing message", dec)
 }
 
-func MockAPIServerErrorReponder(req *http.Request) (*http.Response, error) {
-	return httpmock.NewStringResponse(503, "Server Error"), nil
-}
-func MockAPINonJsonReponder(req *http.Request) (*http.Response, error) {
-	return httpmock.NewStringResponse(200, "Server Error"), nil
-}
+// func TestCheckRepay(t *testing.T) {
+// 	monkey.Patch(time.Now, func() time.Time {
+// 		return time.Date(2000, time.January, 4, 0, 0, 0, 0, time.UTC)
+// 	})
+// 	defer monkey.UnpatchAll()
 
-func TestQueryBackend(t *testing.T) {
-	sample := APIResponse{[]APITransaction{Transactions[0]}}
-	test_data := []struct {
-		name          string
-		arg           map[string]string
-		expected      APIResponse
-		error_message string
-		handler       func(req *http.Request) (*http.Response, error)
-	}{
-		{"HappyPath", map[string]string{"id": "1"}, sample, "", MockedAPIResponder},
-		{"HappyPathEmpty", nil, APIResponse{}, "", MockAPIEmptyResponder},
-		{"ErrorNotOK", nil, APIResponse{}, `no responder found`, httpmock.ConnectionFailure},
-		{"ErrorNot200", nil, APIResponse{}, `server error`, MockAPIServerErrorReponder},
-		{"FailedScan", nil, APIResponse{}, `content type unsupported: `, MockAPINonJsonReponder},
-	}
+// 	type A struct {
+// 		match string
+// 		from  string
+// 		to    string
+// 		days  int
+// 	}
 
-	for _, tt := range test_data {
-		t.Run(tt.name, func(t *testing.T) {
+// 	type E struct {
+// 		err_message string
+// 		calls       int
+// 	}
 
-			monkey.PatchInstanceMethod(
-				reflect.TypeOf(http.DefaultClient),
-				"Do",
-				func(c *http.Client, req *http.Request) (*http.Response, error) {
-					resp, err := tt.handler(req)
-					return resp, err
-				})
-			defer monkey.UnpatchInstanceMethod(reflect.TypeOf(http.DefaultClient), "Do")
+// 	test_data := []struct {
+// 		name            string
+// 		args            A
+// 		expected        string
+// 		expected_params []map[string]string
+// 		err             *E
+// 	}{
+// 		{
+// 			"Empty",
+// 			F{args: Amount{"NOTFOUND", "NotFound", "NotFound", -3},
+// 			"",
+// 			[]map[string]string{{"amount__lt": "0.00", "created__gt": "2000-01-07T00:00:00", "description__like": "NOTFOUND"}},
+// 			nil,
+// 		},
+// 		{
+// 			"Matches",
+// 			F{args: Amount{"WOOLWORTHS", "Food", "Spending", 3},
+// 			"Move money from Food to Spending:\n$2.22 from Sun 2 Jan\n$3.33 from Mon 3 Jan",
+// 			[]map[string]string{
+// 				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
+// 				{"amount": "1.11", "created__gt": "2000-01-01T00:00:01", "description__like": "Food"},
+// 				{"amount": "2.22", "created__gt": "2000-01-02T00:00:01", "description__like": "Food"},
+// 				{"amount": "3.33", "created__gt": "2000-01-03T00:00:01", "description__like": "Food"},
+// 			},
+// 			nil,
+// 		},
+// 		{
+// 			"SingleMatch",
+// 			F{args: Amount{"WOOLWORTHS", "Food", "Spending", 1},
+// 			"Move money from Food to Spending:\n$3.33 from Mon 3 Jan",
+// 			[]map[string]string{
+// 				{"amount__lt": "0.00", "created__gt": "2000-01-03T00:00:00", "description__like": "WOOLWORTHS"},
+// 				{"amount": "3.33", "created__gt": "2000-01-03T00:00:01", "description__like": "Food"},
+// 			},
+// 			nil,
+// 		},
+// 		{
+// 			"ErrInitial",
+// 			F{args: Amount{"WOOLWORTHS", "Food", "Spending", 3},
+// 			"",
+// 			[]map[string]string{
+// 				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
+// 			},
+// 			&E{"Failure", 0},
+// 		},
+// 		{
+// 			"ErrSubsequent",
+// 			F{args: Amount{"WOOLWORTHS", "Food", "Spending", 3},
+// 			"",
+// 			[]map[string]string{
+// 				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
+// 				{"amount": "1.11", "created__gt": "2000-01-01T00:00:01", "description__like": "Food"},
+// 			},
+// 			&E{"Failure", 1},
+// 		},
+// 	}
 
-			result, err := QueryBackend(tt.arg)
-			if tt.error_message == "" {
-				assert.Nil(t, err)
-				assert.Equal(t, tt.expected, result)
-				return
-			}
-			assert.NotNil(t, err)
-			assert.Equal(t, tt.error_message, err.Error())
-		})
-	}
-}
+// 	for _, td := range test_data {
+// 		t.Run(td.name, func(s *testing.T) {
+// 			var called []map[string]string
+// 			monkey.Patch(QueryBackend, func(p map[string]string) (a APIResponse, err error) {
+// 				called = append(called, p)
+// 				if td.err != nil && len(called) > td.err.calls {
+// 					err = errors.New(td.err.err_message)
+// 					return a, err
+// 				}
+// 				a.Data = FilterTransactions(p)
+// 				return
+// 			})
+// 			defer monkey.Unpatch(QueryBackend)
 
-func Contains(s []int, e int64) bool {
-	for _, v := range s {
-		if v == int(e) {
-			return true
-		}
-	}
-	return false
-}
-
-func TestRunCheckAmount(t *testing.T) {
-	type A struct {
-		match     string
-		amount    float64
-		threshold string
-		days      int
-	}
-
-	type H map[string]string
-
-	monkey.Patch(time.Now, func() time.Time {
-		return time.Date(2000, time.January, 4, 0, 0, 0, 0, time.UTC)
-	})
-	defer monkey.UnpatchAll()
-
-	test_data := []struct {
-		name            string
-		args            A
-		expected        string
-		expected_params map[string]string
-		error_message   string
-		query_repsonse  []int
-	}{
-		{
-			"Negative",
-			A{"B", -50.0, "10%", 5},
-			"Unexpected amounts:\nMon 3 Jan Bill for $60.00 expecting $50.00",
-			H{"amount__lt": "-55.00", "created__gt": "1999-12-30T00:00:00", "description__like": "B"},
-			"",
-			[]int{4},
-		},
-		{
-			"Unmatched",
-			A{"B", -50.0, "10%", 5},
-			"",
-			H{"amount__lt": "-55.00", "created__gt": "1999-12-30T00:00:00", "description__like": "B"},
-			"",
-			[]int{},
-		},
-		{
-			"Positive",
-			A{"Sal", 1000, "100", 5},
-			"Unexpected amounts:\nMon 3 Jan Salary for $800.00 expecting $1000.00",
-			H{"amount__lt": "900.00", "created__gt": "1999-12-30T00:00:00", "description__like": "Sal"},
-			"",
-			[]int{5},
-		},
-		{
-			"Exact",
-			A{"X", 1000, "", 5},
-			"Unexpected amounts:\nMon 3 Jan Salary for $800.00 expecting $1000.00",
-			H{"amount__ne": "1000.00", "created__gt": "1999-12-30T00:00:00", "description__like": "X"},
-			"",
-			[]int{5},
-		},
-		{
-			"Err",
-			A{"X", 1000, "", 5},
-			"Unexpected amounts:\nMon 3 Jan Salary for $800.00 expecting $1000.00",
-			H{"amount__ne": "1000.00", "created__gt": "1999-12-30T00:00:00", "description__like": "X"},
-			"something",
-			[]int{5},
-		},
-	}
-
-	for _, td := range test_data {
-		t.Run(td.name, func(s *testing.T) {
-			var called map[string]string
-			monkey.Patch(QueryBackend, func(p map[string]string) (a APIResponse, err error) {
-				called = p
-				if td.error_message != "" {
-					err = errors.New(td.error_message)
-					return
-				}
-				for _, x := range Transactions {
-					if Contains(td.query_repsonse, x.Id) {
-						a.Data = append(a.Data, x)
-					}
-				}
-				return
-			})
-			defer monkey.Unpatch(QueryBackend)
-
-			result, err := CheckAmount(Amount{Match: td.args.match, Days: td.args.days, Expected: td.args.amount, Threshold: td.args.threshold})
-			if td.error_message == "" {
-				assert.Nil(s, err)
-				assert.Equal(s, td.expected, result)
-				assert.Equal(s, td.expected_params, called)
-				return
-			}
-			assert.NotNil(s, err)
-			assert.Equal(s, td.error_message, err.Error())
-		})
-	}
-}
-
-func TestCheckRepay(t *testing.T) {
-	monkey.Patch(time.Now, func() time.Time {
-		return time.Date(2000, time.January, 4, 0, 0, 0, 0, time.UTC)
-	})
-	defer monkey.UnpatchAll()
-
-	type A struct {
-		match string
-		from  string
-		to    string
-		days  int
-	}
-
-	type E struct {
-		err_message string
-		calls       int
-	}
-
-	test_data := []struct {
-		name            string
-		args            A
-		expected        string
-		expected_params []map[string]string
-		err             *E
-	}{
-		{
-			"Empty",
-			A{"NOTFOUND", "NotFound", "NotFound", -3},
-			"",
-			[]map[string]string{{"amount__lt": "0.00", "created__gt": "2000-01-07T00:00:00", "description__like": "NOTFOUND"}},
-			nil,
-		},
-		{
-			"Matches",
-			A{"WOOLWORTHS", "Food", "Spending", 3},
-			"Move money from Food to Spending:\n$2.22 from Sun 2 Jan\n$3.33 from Mon 3 Jan",
-			[]map[string]string{
-				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
-				{"amount": "1.11", "created__gt": "2000-01-01T00:00:01", "description__like": "Food"},
-				{"amount": "2.22", "created__gt": "2000-01-02T00:00:01", "description__like": "Food"},
-				{"amount": "3.33", "created__gt": "2000-01-03T00:00:01", "description__like": "Food"},
-			},
-			nil,
-		},
-		{
-			"SingleMatch",
-			A{"WOOLWORTHS", "Food", "Spending", 1},
-			"Move money from Food to Spending:\n$3.33 from Mon 3 Jan",
-			[]map[string]string{
-				{"amount__lt": "0.00", "created__gt": "2000-01-03T00:00:00", "description__like": "WOOLWORTHS"},
-				{"amount": "3.33", "created__gt": "2000-01-03T00:00:01", "description__like": "Food"},
-			},
-			nil,
-		},
-		{
-			"ErrInitial",
-			A{"WOOLWORTHS", "Food", "Spending", 3},
-			"",
-			[]map[string]string{
-				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
-			},
-			&E{"Failure", 0},
-		},
-		{
-			"ErrSubsequent",
-			A{"WOOLWORTHS", "Food", "Spending", 3},
-			"",
-			[]map[string]string{
-				{"amount__lt": "0.00", "created__gt": "2000-01-01T00:00:00", "description__like": "WOOLWORTHS"},
-				{"amount": "1.11", "created__gt": "2000-01-01T00:00:01", "description__like": "Food"},
-			},
-			&E{"Failure", 1},
-		},
-	}
-
-	for _, td := range test_data {
-		t.Run(td.name, func(s *testing.T) {
-			var called []map[string]string
-			monkey.Patch(QueryBackend, func(p map[string]string) (a APIResponse, err error) {
-				called = append(called, p)
-				if td.err != nil && len(called) > td.err.calls {
-					err = errors.New(td.err.err_message)
-					return a, err
-				}
-				a.Data = FilterTransactions(p)
-				return
-			})
-			defer monkey.Unpatch(QueryBackend)
-
-			result, err := CheckRepay(Repay{Match: td.args.match, Days: td.args.days, From: td.args.from, To: td.args.to})
-			if td.err == nil {
-				assert.Nil(s, err)
-				assert.Equal(s, td.expected, result)
-				assert.Equal(s, td.expected_params, called, "Incorrect QueryBackend params")
-				return
-			}
-			assert.NotNil(s, err)
-			assert.Equal(s, td.err.err_message, err.Error())
-			assert.Equal(s, td.expected_params, called, "Incorrect QueryBackend params")
-		})
-	}
-}
+// 			result, err := CheckRepay(Repay{Match: td.args.match, Days: td.args.days, From: td.args.from, To: td.args.to})
+// 			if td.err == nil {
+// 				assert.Nil(s, err)
+// 				assert.Equal(s, td.expected, result)
+// 				assert.Equal(s, td.expected_params, called, "Incorrect QueryBackend params")
+// 				return
+// 			}
+// 			assert.NotNil(s, err)
+// 			assert.Equal(s, td.err.err_message, err.Error())
+// 			assert.Equal(s, td.expected_params, called, "Incorrect QueryBackend params")
+// 		})
+// 	}
+// }

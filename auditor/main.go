@@ -201,7 +201,7 @@ func RunChecks() error {
 			return errors.New("Invalid check type: " + check.Type)
 		}
 		if message != "" {
-			err := Notify(message)
+			_, err := Notify(message)
 			if err != nil {
 				log.Error().Err(err).Msgf("Notify error: %s", err.Error())
 				return err
@@ -268,6 +268,11 @@ func CheckAmount(c Amount) (msg string, err error) {
 		}
 
 		past = rr.Before(time.Now(), false).AddDate(0, 0, -c.Days)
+
+		if time.Now().After(past.AddDate(0, 0, c.Days*2)) {
+			log.Info().Msgf("Skipping '%s' as outside of dates", c.Name)
+			return "", nil
+		}
 	}
 
 	thresh := 0.0
@@ -306,6 +311,7 @@ func CheckAmount(c Amount) (msg string, err error) {
 				math.Abs(c.Expected),
 			)
 		}
+		return
 	}
 
 	return
@@ -377,12 +383,12 @@ type Settings struct {
 	Mobiles []string `mapstructure:"mobiles"`
 }
 
-func Notify(message string) (err error) {
+func Notify(message string) (sent int, err error) {
 	var settings *Settings
 
 	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(ageHookFunc(ageKey))); err != nil || settings == nil {
 		log.Error().Err(err).Msg("Unable to load notify config")
-		return fmt.Errorf("unable to load settings")
+		return 0, fmt.Errorf("unable to load settings")
 	}
 
 	if skvStore == nil {
@@ -415,16 +421,17 @@ func Notify(message string) (err error) {
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			log.Error().Err(err).Msgf("Failed to make request")
-			return fmt.Errorf("failed to make request")
+			return sent, fmt.Errorf("failed to make request")
 		}
 		defer resp.Body.Close()
 
 		switch resp.StatusCode {
 		case 201:
 			log.Debug().Msg("Sent SMS Successfully")
-			return nil
+			sent = sent + 1
+			continue
 		case 401:
-			return errors.New("authentication failure")
+			return sent, errors.New("authentication failure")
 		case 400:
 			var resp_xml TwilioResponse
 			var resp_body []byte
@@ -432,12 +439,12 @@ func Notify(message string) (err error) {
 			err = xml.Unmarshal(resp_body, &resp_xml)
 			if err != nil {
 				log.Error().Err(err).Msgf("Failed to read response")
-				return fmt.Errorf("failed to read responses")
+				return sent, fmt.Errorf("failed to read responses")
 			}
-			return errors.New(resp_xml.RestException.Message)
+			return sent, errors.New(resp_xml.RestException.Message)
 		default:
-			return errors.New("twilio responded with failure")
+			return sent, errors.New("twilio responded with failure")
 		}
 	}
-	return nil
+	return sent, nil
 }

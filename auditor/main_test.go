@@ -138,7 +138,9 @@ store: "/tmp/test.db"`
 		twillio *H
 	}
 	type E struct {
-		err string
+		err       string
+		sent      int
+		httpcalls int
 	}
 	type T struct {
 		name    string
@@ -149,7 +151,7 @@ store: "/tmp/test.db"`
 		{
 			name:    "No config",
 			fixture: F{``, "no config", false, nil},
-			expect:  E{"unable to load settings"},
+			expect:  E{"unable to load settings", 0, 0},
 		},
 		{
 			name:    "Exist store",
@@ -159,32 +161,37 @@ store: "/tmp/test.db"`
 		{
 			name:    "HTTP error",
 			fixture: F{config, "HTTP error", false, &H{err: errors.New("something went wrong")}},
-			expect:  E{"failed to make request"},
+			expect:  E{err: "failed to make request", httpcalls: 1},
 		},
 		{
 			name:    "Auth error",
 			fixture: F{config, "HTTP error", false, &H{code: 401, body: []byte("")}},
-			expect:  E{"authentication failure"},
+			expect:  E{err: "authentication failure", httpcalls: 1},
 		},
 		{
 			name:    "XML error",
 			fixture: F{config, "Other error", false, &H{code: 400, body: []byte(`<TwilioResponse><RestException><Code>30000</Code><Detail></Detail><Message>Fake Error</Message><MoreInfo>fake.com</MoreInfo><Status>400</Status></RestException></TwilioResponse>`)}},
-			expect:  E{"Fake Error"},
+			expect:  E{err: "Fake Error", httpcalls: 1},
 		},
 		{
 			name:    "Unmarshalble error",
 			fixture: F{config, "Unmarshalble error", false, &H{code: 400, body: []byte(`<<Tw~!!`)}},
-			expect:  E{"failed to read responses"},
+			expect:  E{err: "failed to read responses", httpcalls: 1},
 		},
 		{
 			name:    "Other error",
 			fixture: F{config, "Other error", false, &H{code: 500, body: []byte("Server Error")}},
-			expect:  E{"twilio responded with failure"},
+			expect:  E{err: "twilio responded with failure", httpcalls: 1},
 		},
 		{
 			name:    "Happy",
 			fixture: F{config, "Happy path", false, &H{code: 201, body: []byte("OK")}},
-			expect:  E{},
+			expect:  E{sent: 1, httpcalls: 1},
+		},
+		{
+			name:    "Dryrun",
+			fixture: F{config + "\ndryrun: true", "Dryrun", false, &H{code: 201, body: []byte("OK")}},
+			expect:  E{sent: 0, httpcalls: 0},
 		},
 	}
 
@@ -194,7 +201,9 @@ store: "/tmp/test.db"`
 			viper.SetConfigType("yaml")
 			viper.ReadConfig(bytes.NewBuffer([]byte(test.fixture.config)))
 			skvStore = &skv.KVStore{}
+			httpcalls := 0
 			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
+				httpcalls += 1
 				return &http.Response{StatusCode: test.fixture.twillio.code, Body: io.NopCloser(bytes.NewBuffer(test.fixture.twillio.body))}, test.fixture.twillio.err
 			})}
 			monkey.Patch(decodeAge, func(s string, a *age.X25519Identity) string { return s })
@@ -206,13 +215,15 @@ store: "/tmp/test.db"`
 			})
 			monkey.PatchInstanceMethod(reflect.TypeOf((*skv.KVStore)(nil)), "Put", func(*skv.KVStore, string, interface{}) error { return nil })
 
-			err := Notify(test.fixture.message)
+			sent, err := Notify(test.fixture.message)
 			if test.expect.err == "" {
 				assert.Nil(tt, err)
 			} else {
 				assert.Error(tt, err)
 				assert.EqualError(tt, err, test.expect.err)
 			}
+			assert.Equal(tt, test.expect.sent, sent)
+			assert.Equal(tt, test.expect.httpcalls, httpcalls)
 		})
 	}
 }
@@ -318,10 +329,15 @@ func TestRunCheckAmount(t *testing.T) {
 		},
 		{
 			"RRule",
-			F{args: Amount{Match: "RRule", Rrule: "FREQ=WEEKLY;DTSTART=19991201T000000Z"}},
+			F{args: Amount{Match: "RRule", Rrule: "FREQ=WEEKLY;DTSTART=19991201T000000Z", Days: 10}},
 			E{
-				params: map[string]string{"amount__ne": "0.00", "created__gt": "1999-12-29T00:00:00", "description__like": "RRule"},
+				params: map[string]string{"amount__ne": "0.00", "created__gt": "1999-12-19T00:00:00", "description__like": "RRule"},
 			},
+		},
+		{
+			"RRule out of range",
+			F{args: Amount{Match: "RRule", Rrule: "FREQ=WEEKLY;DTSTART=19991201T000000Z"}},
+			E{},
 		},
 		{
 			"Days",
@@ -400,10 +416,14 @@ func TestRunChecks(t *testing.T) {
 		result string
 		err    error
 	}
+	type N struct {
+		sent int
+		err  error
+	}
 	type F struct {
 		config      string
 		checkamount R
-		notify      R
+		notify      N
 	}
 	type E struct {
 		err         string
@@ -458,7 +478,7 @@ func TestRunChecks(t *testing.T) {
 			fixture: F{
 				config:      configs["amount"],
 				checkamount: R{result: "something OK"},
-				notify:      R{err: errors.New("notify failed")},
+				notify:      N{err: errors.New("notify failed")},
 			},
 			expect: E{
 				checkamount: Amount{Name: "test", Match: "pineapple", Days: 3, Expected: 65, Threshold: "20%", Rrule: ""},
@@ -493,9 +513,9 @@ func TestRunChecks(t *testing.T) {
 				checkamount_params = Amount(p)
 				return test.fixture.checkamount.result, test.fixture.checkamount.err
 			})
-			monkey.Patch(Notify, func(message string) (err error) {
+			monkey.Patch(Notify, func(message string) (sent int, err error) {
 				notify_params = message
-				return test.fixture.notify.err
+				return test.fixture.notify.sent, test.fixture.notify.err
 			})
 
 			err := RunChecks()

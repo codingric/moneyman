@@ -3,7 +3,8 @@ kind: CronJob
 metadata:
   name: moneyman-auditor
 spec:
-  schedule: "00 9,23 * * *"
+  schedule: "0 8-22/3 * * *"
+  timeZone: "Australia/Melbourne"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 120
   jobTemplate:

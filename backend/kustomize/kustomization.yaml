@@ -3,4 +3,4 @@ resources:
 namespace: default
 images:
   - name: ghcr.io/codingric/moneyman/backend
-    newTag: ${GIT_SHA}
+    newTag: 38d89d8

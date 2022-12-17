@@ -80,8 +80,8 @@ func TestFindTransaction(t *testing.T) {
 		{
 			"InvalidRequest",
 			[]gin.Param{},
-			400,
-			`{"error":"Record not found!"}`,
+			404,
+			`{"error":"Record not found"}`,
 		},
 		{
 			"Successful",

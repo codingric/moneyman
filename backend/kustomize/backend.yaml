@@ -87,8 +87,16 @@ spec:
               cpu: "500m"
       volumes:
         - name: database
-          hostPath:
-            path: /data/moneyman
-            type: Directory
-      nodeSelector:
-        moneyman-data: "true"
+          persistentVolumeClaim:
+            claimName: moneyman-backend-db
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name:  moneyman-backend-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi

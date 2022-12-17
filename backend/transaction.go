@@ -3,11 +3,12 @@ package main
 import (
 	"crypto/md5"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,6 +32,9 @@ type Transaction struct {
 // GET /transactions
 // Find all transactions
 func FindTransactions(c *gin.Context) {
+	started := time.Now()
+	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(started)).Send() }()
+
 	filters := c.Request.URL.Query()
 	query := DB
 	for filter, value := range filters {
@@ -48,9 +52,7 @@ func FindTransactions(c *gin.Context) {
 			d, _ := time.Parse("2006-01-02T15:04:05", val)
 			val = d.Format("2006-01-02 15:04:05")
 		}
-		if Debug {
-			log.Printf("Filter: %v %v %v", field, op, val)
-		}
+		log.Debug().Msgf("Filter: %v %v %v", field, op, val)
 
 		switch op {
 		case "like":
@@ -68,6 +70,7 @@ func FindTransactions(c *gin.Context) {
 		case "ne":
 			query = query.Where(field+" != ?", val)
 		default:
+			log.Error().Msgf("invalid operator %s", op)
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid operator %s", op)})
 			return
 		}
@@ -81,10 +84,12 @@ func FindTransactions(c *gin.Context) {
 // GET /transactions/:id
 // Find a transaction
 func FindTransaction(c *gin.Context) {
+	started := time.Now()
+	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(started)).Send() }()
 	// Get model if exist
 	var transaction Transaction
 	if err := DB.Where("id = ?", c.Param("id")).First(&transaction).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Record not found!"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Record not found"})
 		return
 	}
 
@@ -94,6 +99,8 @@ func FindTransaction(c *gin.Context) {
 // POST /transactions
 // Create new transaction
 func CreateTransaction(c *gin.Context) {
+	started := time.Now()
+	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(started)).Send() }()
 	// Validate input
 	var input CreateTransactionInput
 	if err := c.ShouldBindJSON(&input); err != nil {

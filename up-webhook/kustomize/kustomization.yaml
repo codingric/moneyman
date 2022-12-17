@@ -1,10 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 resources:
   - deployment.yaml
   - ingress.yaml
   - service.yaml
+  - sealed-secret.yaml
 namespace: default
-generators:
-  - secret-generator.yaml
 images:
   - name: ghcr.io/codingric/moneyman/up-webhook
-    newTag: ${GIT_SHA}
+    newTag: 38d89d8

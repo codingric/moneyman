@@ -1,7 +1,10 @@
 package main
 
 import (
-	"log"
+	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/gin-gonic/gin"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -10,21 +13,26 @@ import (
 var (
 	database_path = kingpin.Flag("database", "Backend database").Default("backend.db").Short('d').String()
 	verbose       = kingpin.Flag("verbose", "Verbosity").Short('v').Bool()
+	port          = kingpin.Flag("port", "Port").Short('p').Default("8080").String()
 )
 
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 	kingpin.Parse()
-
+	zerolog.DurationFieldUnit = time.Millisecond
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	ConnectDatabase(*database_path, *verbose)
 	if *verbose {
-		log.Printf("Database: %s", *database_path)
+		zerolog.SetGlobalLevel(zerolog.TraceLevel)
 	}
 
 	// Connect to database
-	ConnectDatabase(*database_path, *verbose)
 
 	// Run the server
-	setupServer(true).Run()
+	log.Info().Msgf("Server running on port %s", *port)
+	if err := setupServer(*verbose).Run(":" + *port); err != nil {
+		log.Fatal().Err(err).Msg("Server Error")
+	}
 }
 
 func setupServer(debug bool) *gin.Engine {
@@ -38,5 +46,6 @@ func setupServer(debug bool) *gin.Engine {
 	r.PATCH("/accounts/:id", UpdateAccount)
 	r.GET("/transactions", FindTransactions)
 	r.POST("/transactions", CreateTransaction)
+
 	return r
 }

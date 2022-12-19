@@ -49,6 +49,8 @@ metadata:
   labels:
     app: moneyman-backend
 spec:
+  strategy:
+    type: "Recreate"
   selector:
     matchLabels:
       app: moneyman-backend

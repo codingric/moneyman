@@ -17,9 +17,8 @@ package:
 	.
 
 kustomize-common:
-	@mv kustomize/kustomization.yaml kustomize/_kustomization.yaml; \
-	GIT_SHA=$(GIT_SHA) envsubst < kustomize/_kustomization.yaml > kustomize/kustomization.yaml; \
-	kustomize build --enable-alpha-plugins kustomize | kubectl apply -f -
+	yq e -i '.images[0].newTag="$(GIT_SHA)"' kustomize/kustomization.yaml \
+	&& kubectl apply -k kustomize
 
 test-common:
 	docker run -v $(shell pwd):/build ghcr.io/codingric/gotester

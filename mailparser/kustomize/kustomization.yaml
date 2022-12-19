@@ -3,4 +3,9 @@ resources:
 namespace: default
 images:
   - name: ghcr.io/codingric/moneyman/mailparser
-    newTag: ${GIT_SHA}
+    newTag: 38d89d8
+
+configMapGenerator:
+- name: moneyman-mailparser
+  files:
+    - config.yaml

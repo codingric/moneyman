@@ -260,6 +260,7 @@ func QueryBackend(params map[string]string) (result APIResponse, err error) {
 
 func CheckAmount(c Amount) (msg string, err error) {
 	past := time.Now().AddDate(0, 0, -c.Days)
+	var expected time.Time
 	if c.Rrule != "" {
 		rr, err := rrule.StrToRRule(c.Rrule)
 		if err != nil {
@@ -267,7 +268,8 @@ func CheckAmount(c Amount) (msg string, err error) {
 			return "", fmt.Errorf("rrule invalid")
 		}
 
-		past = rr.Before(time.Now(), false).AddDate(0, 0, -c.Days)
+		expected = rr.Before(time.Now(), false)
+		past = expected.AddDate(0, 0, -c.Days)
 
 		if time.Now().After(past.AddDate(0, 0, c.Days*2)) {
 			log.Info().Msgf("Skipping '%s' as outside of dates", c.Name)
@@ -312,6 +314,15 @@ func CheckAmount(c Amount) (msg string, err error) {
 			)
 		}
 		return
+	}
+
+	if c.Rrule != "" && time.Now().After(expected) {
+		msg = fmt.Sprintf(
+			"Payment for %s ($%0.2f) overdue %d days",
+			c.Name,
+			math.Abs(c.Expected),
+			int(time.Since(expected).Hours()/24),
+		)
 	}
 
 	return

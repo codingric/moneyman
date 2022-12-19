@@ -328,10 +328,11 @@ func TestRunCheckAmount(t *testing.T) {
 			},
 		},
 		{
-			"RRule",
-			F{args: Amount{Match: "RRule", Rrule: "FREQ=WEEKLY;DTSTART=19991201T000000Z", Days: 10}},
+			"RRule overdue",
+			F{args: Amount{Name: "Overdue", Match: "RRule", Rrule: "FREQ=WEEKLY;DTSTART=19991228T000000Z", Days: 7, Expected: 11.11}},
 			E{
-				params: map[string]string{"amount__ne": "0.00", "created__gt": "1999-12-19T00:00:00", "description__like": "RRule"},
+				params: map[string]string{"amount__ne": "11.11", "created__gt": "1999-12-21T00:00:00", "description__like": "RRule"},
+				result: "Payment for Overdue ($11.11) overdue 4 days",
 			},
 		},
 		{
@@ -396,7 +397,7 @@ func TestRunCheckAmount(t *testing.T) {
 			result, err := CheckAmount(test.fixture.args)
 			assert.Equal(tt, test.expected.result, result)
 			if test.expected.params != nil {
-				if assert.NotNil(tt, called) {
+				if assert.NotNil(tt, called, "Expected calls to Backend") {
 					assert.Equal(tt, test.expected.params, called)
 				}
 			}

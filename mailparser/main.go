@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"path/filepath"
 	"regexp"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -30,8 +30,8 @@ func main() {
 
 	http.HandleFunc("/", Handler)
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
-	log.Println("Server started at port " + viper.GetString("port"))
-	log.Fatal(http.ListenAndServe(":"+viper.GetString("port"), nil))
+	log.Info().Msg("Server started on port " + viper.GetString("port"))
+	log.Fatal().Err(http.ListenAndServe(":"+viper.GetString("port"), nil)).Send()
 }
 
 func Configure() {
@@ -52,45 +52,38 @@ func Configure() {
 	viper.AddConfigPath("/etc/mailparser/")
 	err := viper.ReadInConfig() // Find and read the config file
 	if err != nil {             // Handle errors reading the config file
-		log.Fatalf("%v\n", err)
+		log.Fatal().Err(err).Send()
 	}
 
-	if viper.GetBool("verbose") {
-		log.Println("Verbose: ON")
-		log.Printf("Config: `%s`\n", viper.ConfigFileUsed())
-	} else {
-		log.Println("Verbose: OFF")
-
-	}
+	log.Info().Msgf("Loaded config: %s", viper.ConfigFileUsed())
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
+	began := time.Now()
+	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(began)).Send() }()
+
 	dump, _ := httputil.DumpRequest(r, true)
 	body, _ := ioutil.ReadAll(r.Body)
 	hash := md5.Sum(dump)
 
-	log.Printf("Received request - %x\n", hash)
+	log.Debug().Msgf("Received request - %x\n", hash)
 
 	data, err := ParseMessage(body)
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
-		if viper.GetBool("verbose") {
-			log.Printf("Parsing failed: %s\n", err)
-		}
+		log.Error().Err(err).Msgf("Failed to parse body")
 		fn := filepath.Join(viper.GetString("logging.path"), fmt.Sprintf("%x.dump", hash))
 		err := ioutil.WriteFile(fn, dump, 0644)
 		if err != nil {
-			log.Fatal(err)
+			log.Error().Err(err).Str("file", fn).Msg("Failed to save request dump")
 		}
-		log.Printf("Saved request: %s", fn)
+		log.Info().Msgf("Saved request: %s", fn)
 		return
 	}
 	data["account"] = r.RequestURI[1:]
 
-	if viper.GetBool("verbose") {
-		log.Printf("Parsed - %v\n", data)
-	}
+	log.Debug().Msgf("Parsed - %v\n", data)
 
 	jb, _ := json.Marshal(data)
 
@@ -98,29 +91,26 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		resp, post_err := http.Post(viper.GetString("webhook"), "application/json", bytes.NewReader(jb))
 
 		if post_err != nil {
-			log.Printf("Webhook failed: %s (%s)", viper.GetString("webhook"), post_err)
+			log.Error().Err(post_err).Msgf("Webhook failed: %s", viper.GetString("webhook"))
 			w.WriteHeader(503)
 			w.Write([]byte("Error"))
 			return
 		}
 
-		if viper.GetBool("verbose") {
-			rb, _ := io.ReadAll(resp.Body)
-			log.Printf("Webhook response: %s", string(rb))
-		}
+		rb, _ := io.ReadAll(resp.Body)
+		log.Debug().Msgf("Webhook response: %s", string(rb))
 
 	}
 	w.Write([]byte("OK"))
-	if viper.GetBool("verbose") {
-		log.Println("Successfully processed")
-	}
+	log.Info().Msg("Successfully processed")
 	if viper.GetString("logging.type") == "all" {
 		fn := filepath.Join(viper.GetString("logging.path"), fmt.Sprintf("%x.dump", hash))
 		err := ioutil.WriteFile(fn, dump, 0644)
 		if err != nil {
-			log.Fatal(err)
+			log.Error().Err(err).Str("file", fn).Msg("Failed to save request dump")
+			return
 		}
-		log.Printf("Saved request %s", fn)
+		log.Info().Msgf("Saved request %s", fn)
 	}
 }
 
@@ -184,15 +174,13 @@ func ParseMessage(body []byte) (data Dict, err error) {
 	}
 
 	if _, k := data["amount"]; !k {
-		if viper.GetBool("verbose") {
-			log.Printf("--- NO MATCHES ---\n%s\n---\n", wording)
-		}
+		log.Debug().Msgf("No matches: %s", wording)
 		err = errors.New("no matches found")
 		if viper.GetString("logging") == "failure" {
 			hash := json_["envelope"].(map[string]interface{})["md5"].(string)
-			err := ioutil.WriteFile(hash+".json", body, 0644)
-			if err != nil {
-				log.Fatal(err)
+			if err := ioutil.WriteFile(hash+".json", body, 0644); err != nil {
+				log.Error().Err(err).Msgf("Unable to save %s", hash+".json")
+				return data, err
 			}
 			log.Printf("Saved failed request %s.json", hash)
 		}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/mitchellh/mapstructure"
 	"github.com/rapidloop/skv"
 	"github.com/rs/zerolog"
@@ -29,6 +31,9 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/teambition/rrule-go"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var (
@@ -49,7 +54,9 @@ func initStore() {
 	}
 }
 
-func LoadConf() {
+func LoadConf(ctx context.Context) {
+	ctx, span := otel.Tracer("auditor").Start(ctx, "LoadConf")
+	defer span.End()
 	flag.Bool("dryrun", false, "Log instead of SMS")
 	flag.String("agekey", "/etc/auditor/age.key", "Age key")
 	flag.String("config", "/etc/auditor/config.yaml", "Config yaml")
@@ -141,9 +148,22 @@ func ageHookFunc(a *age.X25519Identity) mapstructure.DecodeHookFuncType {
 }
 
 func main() {
-	LoadConf()
+	ctx := context.Background()
+	tp, tpErr := tracing.AspectoTraceProvider("auditor")
+	if tpErr != nil {
+		log.Fatal().Err(tpErr)
+	}
+	defer tp.Shutdown(ctx)
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	tracer := otel.Tracer("auditor")
 
-	if err := RunChecks(); err != nil {
+	ctx, span := tracer.Start(ctx, "main")
+	defer span.End()
+
+	LoadConf(ctx)
+
+	if err := RunChecks(ctx); err != nil {
 		log.Fatal().Msgf("Failure: %s", err.Error())
 	}
 }
@@ -172,7 +192,9 @@ type Amount struct {
 	Rrule     string  `mapstructure:"rrule"`
 }
 
-func RunChecks() error {
+func RunChecks(ctx context.Context) error {
+	ctx, span := otel.Tracer("auditor").Start(ctx, "RunChecks")
+	defer span.End()
 	var checks Checks
 
 	viper.UnmarshalKey("checks", &checks)
@@ -193,7 +215,7 @@ func RunChecks() error {
 			var e error
 			var c Amount
 			viper.UnmarshalKey(fmt.Sprintf("checks.%d", i), &c)
-			message, e = CheckAmount(c)
+			message, e = CheckAmount(c, ctx)
 			if e != nil {
 				return e
 			}
@@ -224,17 +246,19 @@ type APITransaction struct {
 	Created     time.Time `json:"created"`
 }
 
-func QueryBackend(params map[string]string) (result APIResponse, err error) {
-
+func QueryBackend(params map[string]string, ctx context.Context) (result APIResponse, err error) {
+	ctx, span := otel.Tracer("auditor").Start(ctx, "QueryBackend")
+	defer span.End()
 	p := url.Values{}
 	for k, v := range params {
 		p.Set(k, v)
 	}
 	url_ := fmt.Sprintf("%s?%s", viper.GetString("backend"), p.Encode())
-	req, _ := http.NewRequest("GET", url_, nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", url_, nil)
 	log.Trace().Str("params", p.Encode()).Msg("Query backend")
 
-	resp, err := httpClient.Do(req)
+	//resp, err := httpClient.Do(req)
+	resp, err := otelhttp.NewTransport(http.DefaultTransport).RoundTrip(req)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to query backend")
 		return
@@ -258,7 +282,10 @@ func QueryBackend(params map[string]string) (result APIResponse, err error) {
 	return
 }
 
-func CheckAmount(c Amount) (msg string, err error) {
+func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
+	ctx, span := otel.Tracer("auditor").Start(ctx, "CheckAmount")
+	defer span.End()
+
 	past := time.Now().AddDate(0, 0, -c.Days)
 	var expected time.Time
 	if c.Rrule != "" {
@@ -295,7 +322,7 @@ func CheckAmount(c Amount) (msg string, err error) {
 		params["amount__lt"] = fmt.Sprintf("%0.2f", c.Expected+math.Abs(thresh))
 	}
 
-	response, err := QueryBackend(params)
+	response, err := QueryBackend(params, ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to query backend")
 		return msg, err

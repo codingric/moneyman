@@ -76,7 +76,7 @@ func FindTransactions(c *gin.Context) {
 		}
 	}
 	var transactions []Transaction
-	query.Find(&transactions)
+	query.WithContext(c.Request.Context()).Find(&transactions)
 
 	c.JSON(http.StatusOK, gin.H{"data": transactions})
 }
@@ -88,7 +88,7 @@ func FindTransaction(c *gin.Context) {
 	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(started)).Send() }()
 	// Get model if exist
 	var transaction Transaction
-	if err := DB.Where("id = ?", c.Param("id")).First(&transaction).Error; err != nil {
+	if err := DB.WithContext(c.Request.Context()).Where("id = ?", c.Param("id")).First(&transaction).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Record not found"})
 		return
 	}
@@ -123,7 +123,7 @@ func CreateTransaction(c *gin.Context) {
 	a, _ := strconv.ParseInt(input.Account, 10, 64)
 	//t, _ := time.Parse("2006-01-02", input.Created)
 	transaction := Transaction{Md5: fmt.Sprintf("%x", h), Created: input.Created, Amount: f, Description: input.Description, Account: a}
-	result := DB.Create(&transaction)
+	result := DB.WithContext(c.Request.Context()).Create(&transaction)
 
 	if result.Error != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": result.Error})

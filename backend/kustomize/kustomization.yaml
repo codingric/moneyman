@@ -1,5 +1,6 @@
 resources:
   - backend.yaml
+  - aspecto-key.yaml
 namespace: default
 images:
   - name: ghcr.io/codingric/moneyman/backend

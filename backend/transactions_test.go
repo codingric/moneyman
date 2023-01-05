@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ import (
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
 	Debug = true
-	ConnectDatabase(":memory:", false)
+	ConnectDatabase(context.Background(), ":memory:", false)
 	m.Run()
 }
 

@@ -1,0 +1,15 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: aspecto
+  namespace: default
+spec:
+  encryptedData:
+    key: AgB+/2ImuMlfxnEb+wjXIxFAk0QIrvk6WwgGJwjz5ZKBMSiZ7yl9RhdZEnHdkpd8f+kS2Nsfq+QqZ1zumx+jR8boeGVI3jTIXW2IVvs04H/XjPGj0V9MRhtzH7tVS7VLf7oqIhxvh2VbRpr9RskMu0QVP2qB5niFLvwT5ZdKtaVJRLv4onQyAVr4i8ZFIPcDqbytruDhQC3tydvymx8wvyZsKbiRGlOjTfhnO2WRB/flHkZSPGv6hqxyxirBUJaXwdZMMTgGsYO2NuME99h3uVrAvMkS5bbKFJmGMSqrvLLTAVAY8KA92euaT+lbcrgzEMb/RWBHiU3pmldCi8L3TkWEjhCVhD7xN2YxPLzOn5b9FxTOYqmzqh+A30DBOAakRSE7nnu8HYC5Q0nx4QThGfpoVWaYYByy2pxImWtSNVf/BGcYGxZ9FuROKpBN0q1dAnpUvFvdERLp0v9dOLVlJCerm7fa2mgFdjJ+d6HPnOO9kogjQzIOmkpxxMFwpC9k1+F1MNxjheST56ve4PMCOeKNLwVnuNCzi0m8ds+D4bHk3TXZb3brmhEG5HicBsIL3BB8zq4DzXi0YoTwytUYXo9/nBLvdE+g+5agl2gXQCSJ77Nr8xvInt1fyCXE0KQAPBcPOzqD4m00hRlh1mAA5m3KBuJ057nM7wAF9hGpVsfRqArM0xRPVLuz0JsD+yw1YNzVlXq9TrbuEa4zd2WY3HGGDfGH4vdIjWyivgRRoQZsBES2wR8=
+  template:
+    metadata:
+      creationTimestamp: null
+      name: aspecto
+      namespace: default
+

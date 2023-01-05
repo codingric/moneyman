@@ -10,6 +10,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	gtracing "gorm.io/plugin/opentelemetry/tracing"
 )
 
 var DB *gorm.DB
@@ -39,7 +40,7 @@ func (z zerologger) Trace(ctx context.Context, begin time.Time, fc func() (sql s
 	z.Logger.Trace().Int64("rows", r).Dur("duration_ms", time.Since(begin)).Str("verb", verb).Msg(s)
 }
 
-func ConnectDatabase(path string, debug bool) {
+func ConnectDatabase(ctx context.Context, path string, debug bool) {
 
 	//var database *gorm.DB
 	var err error
@@ -64,5 +65,7 @@ func ConnectDatabase(path string, debug bool) {
 	if debug {
 		DB = DB.Debug()
 	}
+	DB.Use(gtracing.NewPlugin())
 	log.Info().Msgf("Database connected: %s", path)
+	DB.WithContext(ctx)
 }

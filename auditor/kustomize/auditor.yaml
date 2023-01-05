@@ -17,6 +17,11 @@ spec:
               env:
                 - name: TZ
                   value: "Australia/Melbourne"
+                - name: ASPECTO_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: aspecto-key
+                      key: key
               args:
                 - "--agekey"
                 - "/etc/auditor/age.key"

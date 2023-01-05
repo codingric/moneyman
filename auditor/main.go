@@ -33,7 +33,6 @@ import (
 	"github.com/teambition/rrule-go"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
 )
 
 var (
@@ -149,16 +148,13 @@ func ageHookFunc(a *age.X25519Identity) mapstructure.DecodeHookFuncType {
 
 func main() {
 	ctx := context.Background()
-	tp, tpErr := tracing.AspectoTraceProvider("auditor")
+	shutdown, tpErr := tracing.InitTraceProvider("auditor")
 	if tpErr != nil {
 		log.Fatal().Err(tpErr)
 	}
-	defer tp.Shutdown(ctx)
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
-	tracer := otel.Tracer("auditor")
+	defer shutdown()
 
-	ctx, span := tracer.Start(ctx, "main")
+	ctx, span := tracing.NewSpan("main", ctx)
 	defer span.End()
 
 	LoadConf(ctx)
@@ -193,7 +189,8 @@ type Amount struct {
 }
 
 func RunChecks(ctx context.Context) error {
-	ctx, span := otel.Tracer("auditor").Start(ctx, "RunChecks")
+	ctx, span := tracing.NewSpan("RunChecks", ctx)
+
 	defer span.End()
 	var checks Checks
 
@@ -247,7 +244,7 @@ type APITransaction struct {
 }
 
 func QueryBackend(params map[string]string, ctx context.Context) (result APIResponse, err error) {
-	ctx, span := otel.Tracer("auditor").Start(ctx, "QueryBackend")
+	ctx, span := tracing.NewSpan("QueryBackend", ctx)
 	defer span.End()
 	p := url.Values{}
 	for k, v := range params {
@@ -283,7 +280,7 @@ func QueryBackend(params map[string]string, ctx context.Context) (result APIResp
 }
 
 func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
-	ctx, span := otel.Tracer("auditor").Start(ctx, "CheckAmount")
+	ctx, span := tracing.NewSpan("CheckAmount", ctx)
 	defer span.End()
 
 	past := time.Now().AddDate(0, 0, -c.Days)

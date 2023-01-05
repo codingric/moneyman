@@ -118,8 +118,8 @@ func TestFindTransactions(t *testing.T) {
 		{
 			"InvalidRequest",
 			`x?=&=`,
-			200,
-			`{"data":null}`,
+			500,
+			`{"error":"Unable to retreive data"}`,
 		},
 		{
 			"Like",

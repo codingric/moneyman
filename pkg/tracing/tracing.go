@@ -10,7 +10,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 )
 
-func AspectoTraceProvider() (*sdktrace.TracerProvider, error) {
+func AspectoTraceProvider(servicename string) (*sdktrace.TracerProvider, error) {
 	exp, err := otlptracegrpc.New(context.Background(),
 		otlptracegrpc.WithEndpoint("collector.aspecto.io:4317"),
 		otlptracegrpc.WithHeaders(map[string]string{
@@ -23,7 +23,7 @@ func AspectoTraceProvider() (*sdktrace.TracerProvider, error) {
 		sdktrace.WithBatcher(exp),
 		sdktrace.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
-			semconv.ServiceNameKey.String("backend"),
+			semconv.ServiceNameKey.String(servicename),
 			semconv.DeploymentEnvironmentKey.String("production"),
 		)),
 	)

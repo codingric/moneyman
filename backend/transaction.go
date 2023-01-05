@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"fmt"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,8 +35,13 @@ type Transaction struct {
 // GET /transactions
 // Find all transactions
 func FindTransactions(c *gin.Context) {
-	started := time.Now()
-	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(started)).Send() }()
+	ctx := context.Background()
+	if c.Request != nil {
+		ctx = c.Request.Context()
+	}
+
+	ctx, span := otel.Tracer("").Start(ctx, "transaction.FindTransactions")
+	defer span.End()
 
 	filters := c.Request.URL.Query()
 	query := DB
@@ -70,13 +78,20 @@ func FindTransactions(c *gin.Context) {
 		case "ne":
 			query = query.Where(field+" != ?", val)
 		default:
-			log.Error().Msgf("invalid operator %s", op)
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid operator %s", op)})
+			msg := fmt.Sprintf("invalid operator %s", op)
+			log.Error().Msg(msg)
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			span.SetStatus(codes.Error, "msg")
 			return
 		}
 	}
 	var transactions []Transaction
-	query.WithContext(c.Request.Context()).Find(&transactions)
+	if err := query.WithContext(ctx).Find(&transactions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to retreive data"})
+		//span.RecordError(err)
+		span.SetStatus(codes.Error, "Unable to retreive data")
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"data": transactions})
 }
@@ -84,12 +99,20 @@ func FindTransactions(c *gin.Context) {
 // GET /transactions/:id
 // Find a transaction
 func FindTransaction(c *gin.Context) {
-	started := time.Now()
-	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(started)).Send() }()
+	ctx := context.Background()
+	if c.Request != nil {
+		ctx = c.Request.Context()
+	}
+
+	ctx, span := otel.Tracer("").Start(ctx, "transaction.FindTransaction")
+	defer span.End()
+
 	// Get model if exist
 	var transaction Transaction
-	if err := DB.WithContext(c.Request.Context()).Where("id = ?", c.Param("id")).First(&transaction).Error; err != nil {
+	if err := DB.WithContext(ctx).Where("id = ?", c.Param("id")).First(&transaction).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Record not found"})
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Record not found")
 		return
 	}
 
@@ -99,31 +122,33 @@ func FindTransaction(c *gin.Context) {
 // POST /transactions
 // Create new transaction
 func CreateTransaction(c *gin.Context) {
-	started := time.Now()
-	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(started)).Send() }()
+	ctx := context.Background()
+	if c.Request != nil {
+		ctx = c.Request.Context()
+	}
+
+	ctx, span := otel.Tracer("").Start(ctx, "transaction.CreateTransaction")
+	defer span.End()
+
 	// Validate input
 	var input CreateTransactionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		if Debug {
-			log.Printf("CreateTransaction.error: %s", err.Error())
-		}
+		log.Error().Caller().Err(err)
 		return
 	}
 
 	b := []string{fmt.Sprint(input.Created.Unix()), input.Account, input.Amount, input.Description}
 	d := strings.Join(b, "!")
 	h := md5.Sum([]byte(d))
-	if Debug {
-		log.Printf("Hash: %x", h)
-	}
+	log.Debug().Caller().Msgf("Hash: %x", h)
 
 	// Create transaction
 	f, _ := strconv.ParseFloat(input.Amount, 64)
 	a, _ := strconv.ParseInt(input.Account, 10, 64)
 	//t, _ := time.Parse("2006-01-02", input.Created)
 	transaction := Transaction{Md5: fmt.Sprintf("%x", h), Created: input.Created, Amount: f, Description: input.Description, Account: a}
-	result := DB.WithContext(c.Request.Context()).Create(&transaction)
+	result := DB.WithContext(ctx).Create(&transaction)
 
 	if result.Error != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": result.Error})
@@ -132,52 +157,3 @@ func CreateTransaction(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": transaction})
 }
-
-// func Upload(c *gin.Context) {
-// 	file, _, err := c.Request.FormFile("csv")
-// 	if err != nil {
-// 		c.String(http.StatusBadRequest, "get form err: %s", err.Error())
-// 		return
-// 	}
-
-// 	reader := csv.NewReader(file)
-// 	records, _ := reader.ReadAll()
-
-// 	hashes := []string{}
-
-// 	imported := 0
-// 	skipped := []gin.H{}
-
-// 	for index, row := range records {
-
-// 		if row[0] == "Date" {
-// 			continue
-// 		}
-
-// 		created, _ := time.Parse("02/01/2006", row[0])
-
-// 		amount := row[3]
-// 		if row[3] == "" {
-// 			amount = row[4]
-// 		}
-
-// 		b := []string{fmt.Sprint(created.Unix()), row[1], amount, row[2]}
-// 		d := strings.Join(b, "!")
-// 		h := md5.Sum([]byte(d))
-
-// 		hashes = append(hashes, fmt.Sprintf("%x", h))
-// 		// Create transaction
-// 		f, _ := strconv.ParseFloat(amount, 64)
-// 		a, _ := strconv.ParseInt(row[1], 10, 64)
-// 		transaction := Transaction{Md5: fmt.Sprintf("%x", h), Created: created, Amount: f, Description: row[2], Account: a}
-// 		result := DB.Debug().Create(&transaction)
-
-// 		if result.Error != nil {
-// 			skipped = append(skipped, gin.H{"index": index, "error": fmt.Sprint(result.Error)})
-// 			continue
-// 		}
-// 		imported += 1
-// 	}
-// 	c.JSON(http.StatusOK, gin.H{"result": gin.H{"imported": imported, "skipped": len(skipped), "errors": skipped}})
-// 	return
-// }

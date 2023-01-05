@@ -31,9 +31,9 @@ func main() {
 	}
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
-	tracer := otel.Tracer("gorm.io/plugin/opentelemetry")
+	tracer := otel.Tracer("")
 
-	_, span := tracer.Start(ctx, "root")
+	_, span := tracer.Start(ctx, "main")
 	defer span.End()
 
 	kingpin.Parse()
@@ -64,6 +64,7 @@ func setupServer(debug bool) *gin.Engine {
 	r.POST("/accounts", CreateAccount)
 	r.PATCH("/accounts/:id", UpdateAccount)
 	r.GET("/transactions", FindTransactions)
+	r.GET("/transaction/:id", FindTransaction)
 	r.POST("/transactions", CreateTransaction)
 
 	return r

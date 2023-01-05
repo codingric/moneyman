@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/json"
 	"errors"
@@ -15,9 +16,11 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type Dict map[string]string
@@ -26,9 +29,15 @@ type Json map[string]interface{}
 
 func main() {
 
+	shutdown, err := tracing.InitTraceProvider("mailparser")
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	defer shutdown()
+
 	Configure()
 
-	http.HandleFunc("/", Handler)
+	http.Handle("/", otelhttp.NewHandler(http.HandlerFunc(Handler), "incoming.mail"))
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
 	log.Info().Msg("Server started on port " + viper.GetString("port"))
 	log.Fatal().Err(http.ListenAndServe(":"+viper.GetString("port"), nil)).Send()
@@ -59,8 +68,9 @@ func Configure() {
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	began := time.Now()
-	defer func() { log.Trace().Caller().Dur("duration_ms", time.Since(began)).Send() }()
+	// ctx, span := tracing.NewSpan("http.incoming", r.Context())
+	// span.SetAttributes()
+	// defer span.End()
 
 	dump, _ := httputil.DumpRequest(r, true)
 	body, _ := ioutil.ReadAll(r.Body)
@@ -68,7 +78,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	log.Debug().Msgf("Received request - %x\n", hash)
 
-	data, err := ParseMessage(body)
+	data, err := ParseMessage(body, r.Context())
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
@@ -88,7 +98,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	jb, _ := json.Marshal(data)
 
 	if viper.GetString("webhook") != "" {
-		resp, post_err := http.Post(viper.GetString("webhook"), "application/json", bytes.NewReader(jb))
+		req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, viper.GetString("webhook"), bytes.NewReader(jb))
+		req.Header.Add("Content-Type", "application/json")
+		resp, post_err := otelhttp.NewTransport(http.DefaultTransport).RoundTrip(req)
 
 		if post_err != nil {
 			log.Error().Err(post_err).Msgf("Webhook failed: %s", viper.GetString("webhook"))
@@ -125,7 +137,9 @@ func stripHtml(str string) string {
 	return s.ReplaceAllString(str, " ")
 }
 
-func ParseMessage(body []byte) (data Dict, err error) {
+func ParseMessage(body []byte, c context.Context) (data Dict, err error) {
+	_, span := tracing.NewSpan("ParseMessage", c)
+	defer span.End()
 
 	if data == nil {
 		data = make(Dict)

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"log"
 	"os"
 	"testing"
@@ -82,7 +83,7 @@ func TestMain(m *testing.M) {
 
 func RunValidation(name string, expected Dict, t *testing.T) {
 	input := LoadFixture(name)
-	result, _ := ParseMessage(input)
+	result, _ := ParseMessage(input, context.Background())
 
 	if !expected.Equal(result) {
 		t.Fatalf("Validation failed.\nExpected:\n%v\nResult:\n%v", expected, result)

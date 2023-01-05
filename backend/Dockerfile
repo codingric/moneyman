@@ -4,7 +4,7 @@ WORKDIR /build
 
 RUN apk add gcc libc-dev git
 
-RUN CGO_ENABLED=1 go install github.com/mattn/go-sqlite3
+#RUN CGO_ENABLED=1 go install github.com/mattn/go-sqlite3@latest
 COPY go.* .
 RUN CGO_ENABLED=1 go mod download -x
 

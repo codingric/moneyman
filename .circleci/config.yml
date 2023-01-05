@@ -126,11 +126,11 @@ workflows:
             (\.circleci.*|Makefile.common) bigbills true
             (\.circleci.*|Makefile.common) auditor true
             (\.circleci.*|Makefile.common) up-webhook true
-            mailparser/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) mailparser true
-            backend/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) backend true
+            mailparser/.* mailparser true
+            backend/.* backend true
             bigbills/.* bigbills true
             auditor/.* auditor true
-            up-webhook/(.*go\.(sum|mod)|.*(?<!test)\.go|Dockerfile|kustomize/.*\.yaml) up-webhook true
+            up-webhook/.* up-webhook true
             .* setup false
           base-revision: << pipeline.git.branch >>
           # this is the path of the configuration we should trigger once

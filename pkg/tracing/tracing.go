@@ -48,5 +48,5 @@ func InitTraceProvider(servicename string) (func(), error) {
 
 func NewSpan(name string, ctx context.Context) (context.Context, trace.Span) {
 	tracer := otel.Tracer(ServiceName)
-	return tracer.Start(ctx, "main")
+	return tracer.Start(ctx, name)
 }

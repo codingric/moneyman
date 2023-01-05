@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/codingric/moneyman/backend/tracing"
+	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -23,7 +23,7 @@ var (
 
 func main() {
 	ctx := context.Background()
-	tp, tpErr := tracing.AspectoTraceProvider()
+	tp, tpErr := tracing.AspectoTraceProvider("backend")
 	defer tp.Shutdown(ctx)
 
 	if tpErr != nil {

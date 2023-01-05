@@ -68,9 +68,6 @@ func Configure() {
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	// ctx, span := tracing.NewSpan("http.incoming", r.Context())
-	// span.SetAttributes()
-	// defer span.End()
 
 	dump, _ := httputil.DumpRequest(r, true)
 	body, _ := ioutil.ReadAll(r.Body)

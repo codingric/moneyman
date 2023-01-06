@@ -21,6 +21,9 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Dict map[string]string
@@ -75,8 +78,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	log.Debug().Msgf("Received request - %x\n", hash)
 
+	span := trace.SpanFromContext(r.Context())
 	data, err := ParseMessage(body, r.Context())
 	if err != nil {
+		span.SetStatus(codes.Error, "Failed to parse payload")
 		w.WriteHeader(400)
 		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
 		log.Error().Err(err).Msgf("Failed to parse body")
@@ -86,9 +91,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			log.Error().Err(err).Str("file", fn).Msg("Failed to save request dump")
 		}
 		log.Info().Msgf("Saved request: %s", fn)
+		span.AddEvent("Request Saved", trace.WithAttributes(
+			attribute.String("request.dump", fn),
+		))
+		span.SetAttributes(attribute.String("request.dump", fn))
 		return
 	}
 	data["account"] = r.RequestURI[1:]
+	span.AddEvent("Data Parsed", trace.WithAttributes(
+		attribute.String("parsed.data", fmt.Sprintf("%v", data)),
+	))
 
 	log.Debug().Msgf("Parsed - %v\n", data)
 
@@ -120,6 +132,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Info().Msgf("Saved request %s", fn)
+		span.AddEvent("Request Saved", trace.WithAttributes(
+			attribute.String("request.dump", fn),
+		))
 	}
 }
 

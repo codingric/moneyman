@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"flag"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"filippo.io/age"
+	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/mitchellh/mapstructure"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -23,7 +25,9 @@ var (
 	ageIdentity *age.X25519Identity
 )
 
-func Init() {
+func Init(ctx context.Context) {
+	_, span := tracing.NewSpan("load.config", ctx)
+	defer span.End()
 	flag.Bool("v", false, "Verbose")
 	flag.String("c", "config.toml", "Config TOML")
 	flag.String("a", "age.key", "Age private key")

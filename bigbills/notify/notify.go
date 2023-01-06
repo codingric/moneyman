@@ -2,6 +2,7 @@ package notify
 
 import (
 	"bigbills/config"
+	"context"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -9,7 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type Settings struct {
@@ -25,9 +28,12 @@ var (
 
 func init() {
 	client = &http.Client{}
+	client.Transport = otelhttp.NewTransport(http.DefaultTransport)
 }
 
-func Notify(message string) (response string, err error) {
+func Notify(message string, ctx context.Context) (response string, err error) {
+	_, span := tracing.NewSpan("notify", ctx)
+	defer span.End()
 	if settings == nil {
 		config.Unmarshal("notify", &settings)
 	}
@@ -45,7 +51,7 @@ func Notify(message string) (response string, err error) {
 
 		body := *strings.NewReader(params.Encode())
 
-		req, _ := http.NewRequest("POST", endpoint, &body)
+		req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, &body)
 		req.SetBasicAuth(
 			settings.Sid,
 			settings.Token,

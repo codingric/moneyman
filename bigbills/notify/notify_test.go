@@ -2,6 +2,7 @@ package notify
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"errors"
 	"fmt"
@@ -98,7 +99,7 @@ func TestNotify(t *testing.T) {
 			})
 			client = &http.Client{Transport: m}
 
-			result, err := Notify("message")
+			result, err := Notify("message", context.Background())
 
 			if test.err == "" {
 				assert.Nil(st, err)

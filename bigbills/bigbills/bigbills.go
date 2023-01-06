@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/otel/attribute"
 
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
@@ -71,12 +73,14 @@ type LateBigBill struct {
 	Days   int       `json:"days"`
 }
 
-func (b *BigBills) CheckLate() (string, error) {
-	if err := b.Hydrate(); err != nil {
+func (b *BigBills) CheckLate(ctx context.Context) (string, error) {
+	ctx, span := tracing.NewSpan("bigbills.checklate", ctx)
+	defer span.End()
+	if err := b.Hydrate(ctx); err != nil {
 		return "", err
 	}
 
-	late, err := b.GetLate()
+	late, err := b.GetLate(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -96,15 +100,19 @@ func (b *BigBills) CheckLate() (string, error) {
 
 }
 
-func (b *BigBills) Hydrate() error {
+func (b *BigBills) Hydrate(ctx context.Context) error {
+	ctx, span := tracing.NewSpan("bigbills.hydrate", ctx)
+	defer span.End()
 	if sheetsService == nil {
 		initAll()
 	}
 
+	ctx, gspan := tracing.NewSpan("Spreadsheets.Values.Get", ctx)
 	resp, err := sheetsService.Spreadsheets.Values.Get(
 		settings.SpreadsheetId,
 		settings.SpreadsheetRange,
 	).Do()
+	gspan.End()
 
 	if err != nil {
 		log.Error().Msgf("Unable to get GetBigBillsRange: `%s`", err.Error())
@@ -137,11 +145,14 @@ func (b *BigBills) Hydrate() error {
 			b.Dates = append(b.Dates, datum)
 		}
 		log.Debug().Msgf("%d rows loaded from spreadsheet", len(resp.Values))
+		span.SetAttributes(attribute.Int("loaded.rows", len(resp.Values)))
 	}
 	return nil
 }
 
-func (b *BigBills) GetLate() (result []LateBigBill, err error) {
+func (b *BigBills) GetLate(ctx context.Context) (result []LateBigBill, err error) {
+	ctx, span := tracing.NewSpan("bigbills.getlate", ctx)
+	defer span.End()
 	for _, payment := range b.Dates {
 
 		future, err := payment.InFuture()
@@ -155,7 +166,7 @@ func (b *BigBills) GetLate() (result []LateBigBill, err error) {
 			break
 		}
 
-		paid, err := payment.Repaid()
+		paid, err := payment.Repaid(ctx)
 		if err != nil {
 			log.Error().Err(err).Msgf("Unable to determine if %s has been paid", payment.Date.String())
 			continue
@@ -177,12 +188,14 @@ func (b *BigBills) GetLate() (result []LateBigBill, err error) {
 	return result, err
 }
 
-func (p *BigBillDate) Repaid() (paid bool, err error) {
+func (p *BigBillDate) Repaid(ctx context.Context) (paid bool, err error) {
+	ctx, span := tracing.NewSpan("bigbilldate.repaid", ctx)
+	defer span.End()
 	if p.Paid != nil {
 		paid = true
 		return
 	}
-	paid, err = p.CheckRepayments()
+	paid, err = p.CheckRepayments(ctx)
 	return
 }
 
@@ -198,7 +211,9 @@ type APITransaction struct {
 	Created     time.Time `json:"created"`
 }
 
-func (p *BigBillDate) CheckRepayments() (paid bool, err error) {
+func (p *BigBillDate) CheckRepayments(ctx context.Context) (paid bool, err error) {
+	ctx, span := tracing.NewSpan("bigbillsdate.checkrepayments", ctx)
+	defer span.End()
 	var (
 		req  *http.Request
 		resp *http.Response
@@ -211,7 +226,7 @@ func (p *BigBillDate) CheckRepayments() (paid bool, err error) {
 		p.Date.Format("2006-01-02T00:00:00"),
 	)
 
-	req, _ = http.NewRequest("GET", url, nil)
+	req, _ = http.NewRequestWithContext(ctx, "GET", url, nil)
 	resp, err = httpClient.Do(req)
 	if err != nil {
 		log.Error().Err(err).Str("Url", url)
@@ -225,12 +240,14 @@ func (p *BigBillDate) CheckRepayments() (paid bool, err error) {
 	json.Unmarshal(rb, &result)
 	paid = len(result.Data) == 1
 	if paid {
-		p.UpdatePaid(result.Data[0].Created)
+		p.UpdatePaid(result.Data[0].Created, ctx)
 	}
 	return
 }
 
-func (p *BigBillDate) UpdatePaid(paid time.Time) (err error) {
+func (p *BigBillDate) UpdatePaid(paid time.Time, ctx context.Context) (err error) {
+	ctx, span := tracing.NewSpan("bigbilldate.updatepaid", ctx)
+	defer span.End()
 	p.Paid = &paid
 
 	spreadsheetId := settings.SpreadsheetId
@@ -238,7 +255,13 @@ func (p *BigBillDate) UpdatePaid(paid time.Time) (err error) {
 		{paid.Format("02/01/2006")},
 	}
 	updateRange := findcell(settings.SpreadsheetRange, p.Row, false)
+	ctx, gspan := tracing.NewSpan("Spreadsheets.Values.Update", ctx)
+	gspan.SetAttributes(
+		attribute.String("range", updateRange),
+		attribute.String("value", paid.Format("02/01/2006")),
+	)
 	_, e := sheetsService.Spreadsheets.Values.Update(spreadsheetId, updateRange, &sheets.ValueRange{Values: values}).ValueInputOption("USER_ENTERED").Do()
+	gspan.End()
 	return e
 }
 

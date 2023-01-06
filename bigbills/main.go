@@ -4,19 +4,34 @@ import (
 	"bigbills/bigbills"
 	"bigbills/config"
 	"bigbills/notify"
+	"context"
+
+	"github.com/codingric/moneyman/pkg/tracing"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	config.Init()
+	shutdown, err := tracing.InitTraceProvider("bigbills")
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	defer shutdown()
+
+	ctx := context.Background()
+
+	ctx, span := tracing.NewSpan("main", ctx)
+	defer span.End()
+
+	config.Init(ctx)
 	bills := &bigbills.BigBills{}
 
-	message, err := bills.CheckLate()
+	message, err := bills.CheckLate(ctx)
 	if err != nil {
 		panic(err.Error())
 	}
 
 	if message != "" {
-		if resp, e := notify.Notify(message); e != nil {
+		if resp, e := notify.Notify(message, ctx); e != nil {
 			panic(resp)
 		}
 	}

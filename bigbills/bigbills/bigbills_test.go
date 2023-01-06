@@ -2,6 +2,7 @@ package bigbills
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -58,7 +59,7 @@ func TestBigBillsDateCheckRepayments(t *testing.T) {
 
 	b := BigBillDate{Date: n, Amount: 100}
 	update_called := false
-	monkey.PatchInstanceMethod(reflect.TypeOf((*BigBillDate)(nil)), "UpdatePaid", func(o *BigBillDate, tt time.Time) error {
+	monkey.PatchInstanceMethod(reflect.TypeOf((*BigBillDate)(nil)), "UpdatePaid", func(o *BigBillDate, tt time.Time, c context.Context) error {
 		update_called = true
 		assert.Equal(t, p, tt)
 		return nil
@@ -72,7 +73,7 @@ func TestBigBillsDateCheckRepayments(t *testing.T) {
 		}
 		return
 	})}
-	paid, err := b.CheckRepayments()
+	paid, err := b.CheckRepayments(context.Background())
 	assert.Equal(t, true, paid)
 	assert.Nil(t, err)
 	assert.True(t, update_called, "UpdatePaid not called")
@@ -86,7 +87,7 @@ func TestBigBillsDateCheckRepayments(t *testing.T) {
 		}
 		return
 	})}
-	paid, err = b.CheckRepayments()
+	paid, err = b.CheckRepayments(context.Background())
 	assert.Equal(t, false, paid)
 	assert.Nil(t, err)
 	assert.True(t, update_called, "UpdatePaid not called")
@@ -113,7 +114,7 @@ func TestBigBillsDateUpdatePaid(t *testing.T) {
 	})
 	defer monkey.UnpatchAll()
 
-	b.UpdatePaid(n)
+	b.UpdatePaid(n, context.Background())
 }
 
 func TestBigBillsGetLate(t *testing.T) {
@@ -124,7 +125,7 @@ func TestBigBillsGetLate(t *testing.T) {
 	monkey.Patch(time.Now, func() time.Time {
 		return now
 	})
-	monkey.PatchInstanceMethod(reflect.TypeOf((*BigBillDate)(nil)), "CheckRepayments", func(*BigBillDate) (paid bool, err error) {
+	monkey.PatchInstanceMethod(reflect.TypeOf((*BigBillDate)(nil)), "CheckRepayments", func(*BigBillDate, context.Context) (paid bool, err error) {
 		return false, nil
 	})
 	defer monkey.UnpatchAll()
@@ -161,7 +162,7 @@ func TestBigBillsGetLate(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(st *testing.T) {
 
-			result, err := test.setup.GetLate()
+			result, err := test.setup.GetLate(context.Background())
 			if test.expect.err == "" {
 				assert.Nil(st, err)
 			} else {
@@ -222,7 +223,7 @@ func TestBigBillsHydrate(t *testing.T) {
 			defer monkey.UnpatchAll()
 
 			var bills BigBills
-			err := bills.Hydrate()
+			err := bills.Hydrate(context.Background())
 			if test.expect.err == "" {
 				assert.Nil(st, err)
 			} else {

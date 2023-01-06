@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"io"
@@ -106,10 +107,10 @@ AGE-SECRET-KEY-1UNDK53VGXQXXY6KNF7D865UW7Y4ADEJTRUPMEX9499AWCTSELMQSNCJU8P`
 
 			defer monkey.UnpatchAll()
 			if test.expect.msg != "" {
-				assert.PanicsWithValue(tt, test.expect.msg, func() { LoadConf() })
+				assert.PanicsWithValue(tt, test.expect.msg, func() { LoadConf(context.Background()) })
 				//assert.Equal(tt, test.expect.panic, fatal())
 			} else {
-				assert.NotPanics(tt, func() { LoadConf() })
+				assert.NotPanics(tt, func() { LoadConf(context.Background()) })
 			}
 		})
 
@@ -215,7 +216,7 @@ store: "/tmp/test.db"`
 			})
 			monkey.PatchInstanceMethod(reflect.TypeOf((*skv.KVStore)(nil)), "Put", func(*skv.KVStore, string, interface{}) error { return nil })
 
-			sent, err := Notify(test.fixture.message)
+			sent, err := Notify(test.fixture.message, context.Background())
 			if test.expect.err == "" {
 				assert.Nil(tt, err)
 			} else {
@@ -276,7 +277,7 @@ func TestQueryBackend(t *testing.T) {
 				return
 			})}
 
-			result, err := QueryBackend(map[string]string{"param": "value"})
+			result, err := QueryBackend(map[string]string{"param": "value"}, context.Background())
 			if test.expected.err != "" {
 				if assert.NotNil(tt, err) {
 					assert.Equal(tt, test.expected.err, err.Error())
@@ -381,7 +382,7 @@ func TestRunCheckAmount(t *testing.T) {
 		t.Run(test.name, func(tt *testing.T) {
 			defer monkey.UnpatchAll()
 			var called map[string]string
-			monkey.Patch(QueryBackend, func(p map[string]string) (a APIResponse, err error) {
+			monkey.Patch(QueryBackend, func(p map[string]string, c context.Context) (a APIResponse, err error) {
 				called = map[string]string{}
 				for k, v := range p {
 					called[k] = v
@@ -394,7 +395,7 @@ func TestRunCheckAmount(t *testing.T) {
 				return time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 			})
 
-			result, err := CheckAmount(test.fixture.args)
+			result, err := CheckAmount(test.fixture.args, context.Background())
 			assert.Equal(tt, test.expected.result, result)
 			if test.expected.params != nil {
 				if assert.NotNil(tt, called, "Expected calls to Backend") {
@@ -510,16 +511,16 @@ func TestRunChecks(t *testing.T) {
 			viper.ReadConfig(bytes.NewBufferString(test.fixture.config))
 
 			defer monkey.UnpatchAll()
-			monkey.Patch(CheckAmount, func(p Amount) (msg string, err error) {
+			monkey.Patch(CheckAmount, func(p Amount, c context.Context) (msg string, err error) {
 				checkamount_params = Amount(p)
 				return test.fixture.checkamount.result, test.fixture.checkamount.err
 			})
-			monkey.Patch(Notify, func(message string) (sent int, err error) {
+			monkey.Patch(Notify, func(message string, c context.Context) (sent int, err error) {
 				notify_params = message
 				return test.fixture.notify.sent, test.fixture.notify.err
 			})
 
-			err := RunChecks()
+			err := RunChecks(context.Background())
 
 			if test.expect.err == "" {
 				assert.Nil(st, err)

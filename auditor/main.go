@@ -43,6 +43,7 @@ var (
 
 func init() {
 	httpClient = &http.Client{}
+	httpClient.Transport = otelhttp.NewTransport(http.DefaultTransport)
 }
 
 func initStore() {
@@ -220,7 +221,7 @@ func RunChecks(ctx context.Context) error {
 			return errors.New("Invalid check type: " + check.Type)
 		}
 		if message != "" {
-			_, err := Notify(message)
+			_, err := Notify(message, ctx)
 			if err != nil {
 				log.Error().Err(err).Msgf("Notify error: %s", err.Error())
 				return err
@@ -254,8 +255,8 @@ func QueryBackend(params map[string]string, ctx context.Context) (result APIResp
 	req, _ := http.NewRequestWithContext(ctx, "GET", url_, nil)
 	log.Trace().Str("params", p.Encode()).Msg("Query backend")
 
-	//resp, err := httpClient.Do(req)
-	resp, err := otelhttp.NewTransport(http.DefaultTransport).RoundTrip(req)
+	resp, err := httpClient.Do(req)
+	//resp, err := otelhttp.NewTransport(http.DefaultTransport).RoundTrip(req)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to query backend")
 		return
@@ -418,7 +419,7 @@ type Settings struct {
 	Mobiles []string `mapstructure:"mobiles"`
 }
 
-func Notify(message string) (sent int, err error) {
+func Notify(message string, ctx context.Context) (sent int, err error) {
 	var settings *Settings
 
 	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(ageHookFunc(ageKey))); err != nil || settings == nil {
@@ -446,13 +447,15 @@ func Notify(message string) (sent int, err error) {
 		}
 		skvStore.Put(hash, m)
 
-		req, _ := http.NewRequest("POST", endpoint, strings.NewReader(body.Encode()))
+		req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(body.Encode()))
+
 		req.SetBasicAuth(settings.Sid, settings.Token)
 
 		if viper.GetBool("dryrun") {
 			log.Info().Msgf("(DRYRUN) SMS : %s", message)
 			continue
 		}
+		//resp, err := otelhttp.NewTransport(http.DefaultTransport).RoundTrip(req)
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			log.Error().Err(err).Msgf("Failed to make request")

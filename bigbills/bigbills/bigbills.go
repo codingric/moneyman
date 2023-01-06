@@ -15,6 +15,7 @@ import (
 
 	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 
 	"google.golang.org/api/option"
@@ -40,6 +41,7 @@ func initAll() {
 		return
 	}
 	httpClient = &http.Client{}
+	httpClient.Transport = otelhttp.NewTransport(http.DefaultTransport)
 	if err := config.Unmarshal("bigbills", &settings); err != nil {
 		log.Fatal().Err(err)
 	}

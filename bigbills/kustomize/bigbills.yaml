@@ -3,7 +3,8 @@ kind: CronJob
 metadata:
   name: moneyman-bigbills
 spec:
-  schedule: "00 23 * * *"
+  schedule: "0 8-22/3 * * *"
+  timeZone: "Australia/Melbourne"
   jobTemplate:
     spec:
       template:

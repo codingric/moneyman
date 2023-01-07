@@ -12,11 +12,11 @@ import (
 	"github.com/codingric/moneyman/pkg/notify"
 )
 
-func TestCheckLate(t *testing.T) {
+func Test(t *testing.T) {
 	tests := []struct {
 		name         string
 		CheckLate    func(*bigbills.BigBills, context.Context) (string, error)
-		Notify       func(string, context.Context) (string, error)
+		Notify       func(string, context.Context) (int, error)
 		expect_panic bool
 	}{
 		{
@@ -36,7 +36,7 @@ func TestCheckLate(t *testing.T) {
 		{
 			"Notify failed",
 			func(bb *bigbills.BigBills, c context.Context) (string, error) { return "Late", nil },
-			func(s string, c context.Context) (string, error) { return "No credit", errors.New("no credit") },
+			func(s string, c context.Context) (int, error) { return 0, errors.New("no credit") },
 			true,
 		},
 	}

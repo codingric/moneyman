@@ -3,13 +3,13 @@ package main
 import (
 	"bigbills/bigbills"
 	"bigbills/config"
-	"bigbills/notify"
 	"context"
 	"errors"
 	"reflect"
 	"testing"
 
 	"bou.ke/monkey"
+	"github.com/codingric/moneyman/pkg/notify"
 )
 
 func TestCheckLate(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
@@ -186,6 +187,12 @@ func (b *BigBills) GetLate(ctx context.Context) (result []LateBigBill, err error
 			payment.DaysLate()}
 
 		result = append(result, late)
+		span.AddEvent("Overdue BigBill", trace.WithAttributes(
+			attribute.String("date", payment.Date.Format("02/01/2006")),
+			attribute.Float64("amount", payment.Amount),
+			attribute.Int("days.late", payment.DaysLate()),
+		),
+		)
 	}
 	return result, err
 }

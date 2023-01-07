@@ -3,9 +3,9 @@ package main
 import (
 	"bigbills/bigbills"
 	"bigbills/config"
-	"bigbills/notify"
 	"context"
 
+	"github.com/codingric/moneyman/pkg/notify"
 	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/rs/zerolog/log"
 )

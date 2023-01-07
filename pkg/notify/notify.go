@@ -12,10 +12,14 @@ import (
 	"strings"
 
 	"github.com/codingric/moneyman/pkg/age"
+	"github.com/codingric/moneyman/pkg/tracing"
 	"github.com/rapidloop/skv"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -56,10 +60,17 @@ type Settings struct {
 }
 
 func Notify(message string, ctx context.Context) (sent int, err error) {
+	ctx, span := tracing.NewSpan("pkg.notify", ctx)
+	defer span.End()
+
 	var settings *Settings
 
 	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(age.AgeHookFunc(age.AgeKey))); err != nil || settings == nil {
 		log.Error().Err(err).Msg("Unable to load notify config")
+		span.RecordError(err, trace.WithAttributes(
+			attribute.String("message", message),
+		))
+		span.SetStatus(codes.Error, "Unable to load settings")
 		return 0, fmt.Errorf("unable to load settings")
 	}
 
@@ -79,6 +90,11 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 		hash := fmt.Sprintf("%x", md5.Sum([]byte(body.Encode())))
 		if err := skvStore.Get(hash, nil); err == nil {
 			log.Info().Str("hash", hash).Msgf("Message already sent to %s", m)
+			span.AddEvent("Message already sent", trace.WithAttributes(
+				attribute.String("message", message),
+				attribute.String("number", m),
+				attribute.String("hash", hash),
+			))
 			continue
 		}
 		skvStore.Put(hash, m)
@@ -95,6 +111,10 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			log.Error().Err(err).Msgf("Failed to make request")
+			span.RecordError(err, trace.WithAttributes(
+				attribute.String("message", message),
+			))
+			span.SetStatus(codes.Error, "failed to make request")
 			return sent, fmt.Errorf("failed to make request")
 		}
 		defer resp.Body.Close()
@@ -103,8 +123,16 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 		case 201:
 			log.Debug().Msg("Sent SMS Successfully")
 			sent = sent + 1
+			span.AddEvent("Sent message successfully", trace.WithAttributes(
+				attribute.String("message", message),
+				attribute.String("number", m),
+			))
 			continue
 		case 401:
+			span.RecordError(err, trace.WithAttributes(
+				attribute.String("message", message),
+			))
+			span.SetStatus(codes.Error, "authentication failure")
 			return sent, errors.New("authentication failure")
 		case 400:
 			var resp_xml TwilioResponse
@@ -113,10 +141,16 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 			err = xml.Unmarshal(resp_body, &resp_xml)
 			if err != nil {
 				log.Error().Err(err).Msgf("Failed to read response")
+				span.RecordError(err, trace.WithAttributes(
+					attribute.String("message", message),
+				))
+				span.SetStatus(codes.Error, "failed to read responses")
 				return sent, fmt.Errorf("failed to read responses")
 			}
+			span.SetStatus(codes.Error, resp_xml.RestException.Message)
 			return sent, errors.New(resp_xml.RestException.Message)
 		default:
+			span.SetStatus(codes.Error, "twilio responded with failure")
 			return sent, errors.New("twilio responded with failure")
 		}
 	}

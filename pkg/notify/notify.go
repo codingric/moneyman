@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strings"
 
-	fage "filippo.io/age"
 	"github.com/codingric/moneyman/pkg/age"
 	"github.com/rapidloop/skv"
 	"github.com/rs/zerolog/log"
@@ -20,7 +19,6 @@ import (
 )
 
 var (
-	ageKey     *fage.X25519Identity
 	httpClient *http.Client
 	skvStore   *skv.KVStore
 )
@@ -60,7 +58,7 @@ type Settings struct {
 func Notify(message string, ctx context.Context) (sent int, err error) {
 	var settings *Settings
 
-	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(age.AgeHookFunc(ageKey))); err != nil || settings == nil {
+	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(age.AgeHookFunc(age.AgeKey))); err != nil || settings == nil {
 		log.Error().Err(err).Msg("Unable to load notify config")
 		return 0, fmt.Errorf("unable to load settings")
 	}

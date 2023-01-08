@@ -24,6 +24,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/teambition/rrule-go"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 var (
@@ -41,7 +43,7 @@ func LoadConf(ctx context.Context) error {
 	flag.Bool("dryrun", false, "Log instead of SMS")
 	flag.String("agekey", "/etc/auditor/age.key", "Age key")
 	flag.String("config", "/etc/auditor/config.yaml", "Config yaml")
-	flag.String("loglevel", zerolog.ErrorLevel.String(), "trace|debug|info|error|fatal|panic|disabled")
+	flag.String("loglevel", zerolog.InfoLevel.String(), "trace|debug|info|error|fatal|panic|disabled")
 	flag.String("store", "/var/run/auditor/notifications.db", "Location for KV store")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
@@ -61,19 +63,22 @@ func LoadConf(ctx context.Context) error {
 	err := viper.ReadInConfig()
 	if err != nil {
 		log.Error().Err(err).Msgf("Unable to read config: `%s`", cpath)
+		span.RecordError(err)
 		return fmt.Errorf("unable to load config: `%s`", cpath)
 	}
 
 	lvl := zerolog.InfoLevel
 	lvl, err = zerolog.ParseLevel(viper.GetString("loglevel"))
 	if err != nil {
-		log.Error().Err(err).Msgf("Ignoring --loglevel")
+		log.Error().Err(err).Str("span_id", span.SpanContext().SpanID().String()).Msgf("Ignoring --loglevel")
+		span.RecordError(err)
 		lvl = zerolog.InfoLevel
 	}
 	zerolog.SetGlobalLevel(lvl)
-	log.Info().Msgf("Config loaded: `%s`", viper.ConfigFileUsed())
+	log.Info().Str("span_id", span.SpanContext().SpanID().String()).Msgf("Config loaded: `%s`", viper.ConfigFileUsed())
 
 	if err := age.Init(viper.GetString("agekey")); err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("unable to load agekey: `%s`", viper.GetString("agekey"))
 	}
 
@@ -89,6 +94,7 @@ func main() {
 	defer shutdown()
 
 	ctx, span := tracing.NewSpan("main", ctx)
+	log.Logger = log.Logger.With().Str("trace_id", span.SpanContext().TraceID().String()).Logger()
 	defer span.End()
 
 	LoadConf(ctx)
@@ -183,6 +189,7 @@ func QueryBackend(params map[string]string, ctx context.Context) (result APIResp
 	p := url.Values{}
 	for k, v := range params {
 		p.Set(k, v)
+		span.SetAttributes(attribute.String(k, v))
 	}
 	url_ := fmt.Sprintf("%s?%s", viper.GetString("backend"), p.Encode())
 	req, _ := http.NewRequestWithContext(ctx, "GET", url_, nil)
@@ -216,6 +223,9 @@ func QueryBackend(params map[string]string, ctx context.Context) (result APIResp
 func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
 	ctx, span := tracing.NewSpan("CheckAmount", ctx)
 	defer span.End()
+	var s strings.Builder
+	json.NewEncoder(&s).Encode(c)
+	span.SetAttributes(attribute.String("check", s.String()))
 
 	past := time.Now().AddDate(0, 0, -c.Days)
 	var expected time.Time
@@ -223,6 +233,8 @@ func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
 		rr, err := rrule.StrToRRule(c.Rrule)
 		if err != nil {
 			log.Error().Err(err).Msgf("Unable to parse rrule '%s'", c.Rrule)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, fmt.Sprintf("Unable to parse rrule '%s'", c.Rrule))
 			return "", fmt.Errorf("rrule invalid")
 		}
 
@@ -256,6 +268,8 @@ func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
 	response, err := QueryBackend(params, ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to query backend")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to query backend")
 		return msg, err
 	}
 

@@ -19,11 +19,11 @@ var AgeKey *fage.X25519Identity
 func Init(keypath string) {
 	b, err := os.ReadFile(keypath) // just pass the file name
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Failed to open age key: `%s`", keypath)
+		log.Error().Err(err).Msgf("Failed to open age key: `%s`", keypath)
 	}
 	AgeKey, err = loadAgeKey(b)
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Failed to load key: `%s`", keypath)
+		log.Error().Err(err).Msgf("Failed to load key: `%s`", keypath)
 	}
 }
 

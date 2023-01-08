@@ -16,15 +16,18 @@ import (
 
 var AgeKey *fage.X25519Identity
 
-func Init(keypath string) {
+func Init(keypath string) error {
 	b, err := os.ReadFile(keypath) // just pass the file name
 	if err != nil {
 		log.Error().Err(err).Msgf("Failed to open age key: `%s`", keypath)
+		return err
 	}
 	AgeKey, err = loadAgeKey(b)
 	if err != nil {
 		log.Error().Err(err).Msgf("Failed to load key: `%s`", keypath)
+		return err
 	}
+	return nil
 }
 
 func loadAgeKey(b []byte) (a *fage.X25519Identity, e error) {

@@ -1,12 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/base64"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,31 +10,24 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
-	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"filippo.io/age"
+	"github.com/codingric/moneyman/pkg/age"
+	"github.com/codingric/moneyman/pkg/notify"
 	"github.com/codingric/moneyman/pkg/tracing"
-	"github.com/mitchellh/mapstructure"
-	"github.com/rapidloop/skv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/teambition/rrule-go"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
 )
 
 var (
-	ageKey     *age.X25519Identity
 	httpClient *http.Client
-	skvStore   *skv.KVStore
 )
 
 func init() {
@@ -46,16 +35,8 @@ func init() {
 	httpClient.Transport = otelhttp.NewTransport(http.DefaultTransport)
 }
 
-func initStore() {
-	var err error
-	skvStore, err = skv.Open(viper.GetString("store"))
-	if err != nil {
-		log.Fatal().Err(err).Msg("Unable to init KV store")
-	}
-}
-
-func LoadConf(ctx context.Context) {
-	ctx, span := otel.Tracer("auditor").Start(ctx, "LoadConf")
+func LoadConf(ctx context.Context) error {
+	_, span := tracing.NewSpan("LoadConf", ctx)
 	defer span.End()
 	flag.Bool("dryrun", false, "Log instead of SMS")
 	flag.String("agekey", "/etc/auditor/age.key", "Age key")
@@ -79,7 +60,8 @@ func LoadConf(ctx context.Context) {
 	viper.AddConfigPath(fpath)
 	err := viper.ReadInConfig()
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Unable to read config: `%s`", cpath)
+		log.Error().Err(err).Msgf("Unable to read config: `%s`", cpath)
+		return fmt.Errorf("unable to load config: `%s`", cpath)
 	}
 
 	lvl := zerolog.InfoLevel
@@ -91,60 +73,11 @@ func LoadConf(ctx context.Context) {
 	zerolog.SetGlobalLevel(lvl)
 	log.Info().Msgf("Config loaded: `%s`", viper.ConfigFileUsed())
 
-	b, err := os.ReadFile(viper.GetString("agekey")) // just pass the file name
-	if err != nil {
-		log.Fatal().Err(err).Msgf("Failed to open age key: `%s`", viper.GetString("agekey"))
+	if err := age.Init(viper.GetString("agekey")); err != nil {
+		return fmt.Errorf("unable to load agekey: `%s`", viper.GetString("agekey"))
 	}
-	ageKey, err = loadAgeKey(b)
-	if err != nil {
-		log.Fatal().Msgf("Unable to load age key: %s", err.Error())
-	}
-}
 
-func loadAgeKey(b []byte) (a *age.X25519Identity, e error) {
-	// Remove comments
-	re := regexp.MustCompile(`(s?)#.*\n`)
-	c := re.ReplaceAll(b, nil)
-	str := string(c) // convert content to a 'string'
-
-	a, e = age.ParseX25519Identity(strings.Trim(str, "\n"))
-	return
-}
-
-func decodeAge(s string, a *age.X25519Identity) string {
-	enc := strings.TrimPrefix(s, "age:")
-	eb, _ := base64.StdEncoding.DecodeString(enc)
-	r := bytes.NewReader(eb)
-	d, _ := age.Decrypt(r, a)
-	b := &bytes.Buffer{}
-	io.Copy(b, d)
-	return b.String()
-}
-
-func ageHookFunc(a *age.X25519Identity) mapstructure.DecodeHookFuncType {
-	// Wrapped in a function call to add optional input parameters (eg. separator)
-	return func(
-		f reflect.Type, // data type
-		t reflect.Type, // target data type
-		data interface{}, // raw data
-	) (interface{}, error) {
-
-		// Check if the data type matches the expected one
-		if f.Kind() != reflect.String {
-			return data, nil
-		}
-
-		// Check if the target type matches the expected one
-		if t.Kind() != reflect.String {
-			return data, nil
-		}
-
-		if !strings.HasPrefix(data.(string), "age:") {
-			return data, nil
-		}
-
-		return decodeAge(data.(string), a), nil
-	}
+	return nil
 }
 
 func main() {
@@ -221,7 +154,7 @@ func RunChecks(ctx context.Context) error {
 			return errors.New("Invalid check type: " + check.Type)
 		}
 		if message != "" {
-			_, err := Notify(message, ctx)
+			_, err := notify.Notify(message, ctx)
 			if err != nil {
 				log.Error().Err(err).Msgf("Notify error: %s", err.Error())
 				return err
@@ -274,7 +207,7 @@ func QueryBackend(params map[string]string, ctx context.Context) (result APIResp
 	err = json.Unmarshal(resp_body, &result)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to pase query result")
-		err = errors.New("Failed not parse result")
+		err = errors.New("failed not parse result")
 		return
 	}
 	return
@@ -398,91 +331,4 @@ func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
 //	}
 func CheckRepay(c Repay) (msg string, err error) {
 	return
-}
-
-type TwilioResponse struct {
-	XMLName       xml.Name            `xml:"TwilioResponse"`
-	RestException TwilioRestException `xml:"RestException"`
-}
-
-type TwilioRestException struct {
-	XMLName  xml.Name `xml:"RestException"`
-	Code     int64    `xml:"Code"`
-	Message  string   `xml:"Message"`
-	MoreInfo string   `xml:"MoreInfo"`
-	Status   int64    `xml:"Status"`
-}
-
-type Settings struct {
-	Sid     string   `mapstructure:"sid"`
-	Token   string   `mapstructure:"token"`
-	Mobiles []string `mapstructure:"mobiles"`
-}
-
-func Notify(message string, ctx context.Context) (sent int, err error) {
-	var settings *Settings
-
-	if err := viper.UnmarshalKey("notify", &settings, viper.DecodeHook(ageHookFunc(ageKey))); err != nil || settings == nil {
-		log.Error().Err(err).Msg("Unable to load notify config")
-		return 0, fmt.Errorf("unable to load settings")
-	}
-
-	if skvStore == nil {
-		initStore()
-	}
-
-	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + settings.Sid + "/Messages"
-
-	for _, m := range settings.Mobiles {
-		body := url.Values{
-			"To":   []string{m},
-			"From": []string{"Budget"},
-			"Body": []string{message},
-		}
-
-		hash := fmt.Sprintf("%x", md5.Sum([]byte(body.Encode())))
-		if err := skvStore.Get(hash, nil); err == nil {
-			log.Info().Str("hash", hash).Msgf("Message already sent to %s", m)
-			continue
-		}
-		skvStore.Put(hash, m)
-
-		req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(body.Encode()))
-
-		req.SetBasicAuth(settings.Sid, settings.Token)
-
-		if viper.GetBool("dryrun") {
-			log.Info().Msgf("(DRYRUN) SMS : %s", message)
-			continue
-		}
-		//resp, err := otelhttp.NewTransport(http.DefaultTransport).RoundTrip(req)
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to make request")
-			return sent, fmt.Errorf("failed to make request")
-		}
-		defer resp.Body.Close()
-
-		switch resp.StatusCode {
-		case 201:
-			log.Debug().Msg("Sent SMS Successfully")
-			sent = sent + 1
-			continue
-		case 401:
-			return sent, errors.New("authentication failure")
-		case 400:
-			var resp_xml TwilioResponse
-			var resp_body []byte
-			resp_body, _ = io.ReadAll(resp.Body)
-			err = xml.Unmarshal(resp_body, &resp_xml)
-			if err != nil {
-				log.Error().Err(err).Msgf("Failed to read response")
-				return sent, fmt.Errorf("failed to read responses")
-			}
-			return sent, errors.New(resp_xml.RestException.Message)
-		default:
-			return sent, errors.New("twilio responded with failure")
-		}
-	}
-	return sent, nil
 }

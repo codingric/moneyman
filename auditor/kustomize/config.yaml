@@ -5,6 +5,25 @@ checks:
     days: 1
     match: Gowrie
     rrule: FREQ=WEEKLY;INTERVAL=2;WKST=TH;DTSTART=20220714T000000Z
+  - type: amount
+    name: Helen Pay
+    expected: 4800
+    days: 3
+    match: HELEN
+    rrule: RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=15
+  - type: amount
+    name: AHM
+    expected: -387.91
+    days: 1
+    match: AHM
+    rrule: RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=12
+  - type: amount
+    name: AWS
+    expected: -8.94
+    threshold: 10%
+    days: 1
+    match: AMAZON
+    rrule: RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=4
 backend: http://moneyman-backend:8080/transactions
 notify:
   sid: age:YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA3bG9XdWhJS1BtRkVzRmV4RHpSZE4vRzY2TWFtNkNoV3BVSUxrRytwWUVZCmFTM3BkTVk5Vnk3em1DWDl3NVpseWkycXY0NnluMTdCUktNdlZKQXVkQmMKLS0tIDJFZjhFc3I5cnJVaXpieHFjSUtObnJnQ2NXdlhYU0U0Nms5WVo5ck5IMVkKRwVACBdVuCj1NCXwi4TknoS9CArc5rDvNWUJXYtJwbDlb3fqPjm+RmUAg/SA5GQDmM72hnWGwkdoB5+hwbWBrS9F

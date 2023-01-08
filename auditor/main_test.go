@@ -8,15 +8,14 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
 	"bou.ke/monkey"
-	"filippo.io/age"
-	"github.com/rapidloop/skv"
+	"github.com/codingric/moneyman/pkg/notify"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/rzajac/zltest"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -63,7 +62,9 @@ AGE-SECRET-KEY-1UNDK53VGXQXXY6KNF7D865UW7Y4ADEJTRUPMEX9499AWCTSELMQSNCJU8P`
 	conffile.Close()
 
 	type E struct {
-		msg string
+		err   string
+		log   string
+		level zerolog.Level
 	}
 	tests := []struct {
 		name    string
@@ -73,17 +74,17 @@ AGE-SECRET-KEY-1UNDK53VGXQXXY6KNF7D865UW7Y4ADEJTRUPMEX9499AWCTSELMQSNCJU8P`
 		{
 			name:    "Rubbish values",
 			fixture: []string{"--config", "/nonexistant/nonexistant.yaml"},
-			expect:  E{msg: "fatal: Unable to read config: `/nonexistant/nonexistant.yaml`"},
+			expect:  E{err: "unable to load config: `/nonexistant/nonexistant.yaml`"},
 		},
 		{
 			name:    "invalid loglevel",
 			fixture: []string{"--config", confpath, "--loglevel", "invalid"},
-			expect:  E{msg: "error: Ignoring --loglevel"},
+			expect:  E{log: "Ignoring --loglevel", err: "unable to load agekey: `/etc/auditor/age.key`"},
 		},
 		{
 			name:    "invalid key",
 			fixture: []string{"--config", confpath, "--loglevel", "debug", "--agekey", "/non/existant/age.key"},
-			expect:  E{msg: "fatal: Failed to open age key: `/non/existant/age.key`"},
+			expect:  E{err: "unable to load agekey: `/non/existant/age.key`"},
 		},
 	}
 
@@ -91,142 +92,31 @@ AGE-SECRET-KEY-1UNDK53VGXQXXY6KNF7D865UW7Y4ADEJTRUPMEX9499AWCTSELMQSNCJU8P`
 		t.Run(test.name, func(tt *testing.T) {
 			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-			hooker := func(e *zerolog.Event, level zerolog.Level, msg string) {
-				switch level {
-				case zerolog.ErrorLevel, zerolog.FatalLevel:
-					monkey.Patch(os.Exit, func(int) {
-						panic(level.String() + ": " + msg)
-					})
-					panic(level.String() + ": " + msg)
-				}
-			}
-			log.Logger = log.Logger.Hook(MockHook{HookFunc: hooker})
+			tst := zltest.New(tt)
+			log.Logger = zerolog.New(tst).With().Timestamp().Logger()
+
 			monkey.Patch(pflag.Parse, func() {
 				pflag.CommandLine.Parse(test.fixture)
 			})
 
 			defer monkey.UnpatchAll()
-			if test.expect.msg != "" {
-				assert.PanicsWithValue(tt, test.expect.msg, func() { LoadConf(context.Background()) })
-				//assert.Equal(tt, test.expect.panic, fatal())
-			} else {
-				assert.NotPanics(tt, func() { LoadConf(context.Background()) })
-			}
-		})
-
-	}
-
-}
-
-func TestNotify(t *testing.T) {
-	zerolog.SetGlobalLevel(zerolog.Disabled)
-	config := `
-notify:
-  sid: "sometihng"
-  token: "something"
-  mobiles:
-  - "+6140000000"
-store: "/tmp/test.db"`
-	type H struct {
-		body []byte
-		code int
-		err  error
-	}
-	type F struct {
-		config  string
-		message string
-		store   bool
-		twillio *H
-	}
-	type E struct {
-		err       string
-		sent      int
-		httpcalls int
-	}
-	type T struct {
-		name    string
-		fixture F
-		expect  E
-	}
-	tests := []T{
-		{
-			name:    "No config",
-			fixture: F{``, "no config", false, nil},
-			expect:  E{"unable to load settings", 0, 0},
-		},
-		{
-			name:    "Exist store",
-			fixture: F{config, "Exist store", true, nil},
-			expect:  E{},
-		},
-		{
-			name:    "HTTP error",
-			fixture: F{config, "HTTP error", false, &H{err: errors.New("something went wrong")}},
-			expect:  E{err: "failed to make request", httpcalls: 1},
-		},
-		{
-			name:    "Auth error",
-			fixture: F{config, "HTTP error", false, &H{code: 401, body: []byte("")}},
-			expect:  E{err: "authentication failure", httpcalls: 1},
-		},
-		{
-			name:    "XML error",
-			fixture: F{config, "Other error", false, &H{code: 400, body: []byte(`<TwilioResponse><RestException><Code>30000</Code><Detail></Detail><Message>Fake Error</Message><MoreInfo>fake.com</MoreInfo><Status>400</Status></RestException></TwilioResponse>`)}},
-			expect:  E{err: "Fake Error", httpcalls: 1},
-		},
-		{
-			name:    "Unmarshalble error",
-			fixture: F{config, "Unmarshalble error", false, &H{code: 400, body: []byte(`<<Tw~!!`)}},
-			expect:  E{err: "failed to read responses", httpcalls: 1},
-		},
-		{
-			name:    "Other error",
-			fixture: F{config, "Other error", false, &H{code: 500, body: []byte("Server Error")}},
-			expect:  E{err: "twilio responded with failure", httpcalls: 1},
-		},
-		{
-			name:    "Happy",
-			fixture: F{config, "Happy path", false, &H{code: 201, body: []byte("OK")}},
-			expect:  E{sent: 1, httpcalls: 1},
-		},
-		{
-			name:    "Dryrun",
-			fixture: F{config + "\ndryrun: true", "Dryrun", false, &H{code: 201, body: []byte("OK")}},
-			expect:  E{sent: 0, httpcalls: 0},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(tt *testing.T) {
-			defer monkey.UnpatchAll()
-			viper.SetConfigType("yaml")
-			viper.ReadConfig(bytes.NewBuffer([]byte(test.fixture.config)))
-			skvStore = &skv.KVStore{}
-			httpcalls := 0
-			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
-				httpcalls += 1
-				return &http.Response{StatusCode: test.fixture.twillio.code, Body: io.NopCloser(bytes.NewBuffer(test.fixture.twillio.body))}, test.fixture.twillio.err
-			})}
-			monkey.Patch(decodeAge, func(s string, a *age.X25519Identity) string { return s })
-			monkey.PatchInstanceMethod(reflect.TypeOf((*skv.KVStore)(nil)), "Get", func(*skv.KVStore, string, interface{}) error {
-				if test.fixture.store {
-					return nil
+			err := LoadConf(context.Background())
+			if test.expect.err != "" {
+				if assert.Error(tt, err) {
+					assert.Equal(tt, test.expect.err, err.Error())
 				}
-				return errors.New("")
-			})
-			monkey.PatchInstanceMethod(reflect.TypeOf((*skv.KVStore)(nil)), "Put", func(*skv.KVStore, string, interface{}) error { return nil })
-
-			sent, err := Notify(test.fixture.message, context.Background())
-			if test.expect.err == "" {
-				assert.Nil(tt, err)
 			} else {
-				assert.Error(tt, err)
-				assert.EqualError(tt, err, test.expect.err)
+				assert.Nil(tt, err)
 			}
-			assert.Equal(tt, test.expect.sent, sent)
-			assert.Equal(tt, test.expect.httpcalls, httpcalls)
+			if test.expect.log != "" {
+				ent := tst.Entries()
+				ent.ExpMsg(test.expect.log)
+				//ent.ExpLevel(test.expect.level)
+			}
 		})
+
 	}
+
 }
 
 func TestQueryBackend(t *testing.T) {
@@ -257,7 +147,7 @@ func TestQueryBackend(t *testing.T) {
 		{
 			"Invalid JSON",
 			H{status: 200, body: "{Non_'Json"},
-			E{err: "Failed not parse result"},
+			E{err: "failed not parse result"},
 		},
 		{
 			"Happy",
@@ -515,7 +405,7 @@ func TestRunChecks(t *testing.T) {
 				checkamount_params = Amount(p)
 				return test.fixture.checkamount.result, test.fixture.checkamount.err
 			})
-			monkey.Patch(Notify, func(message string, c context.Context) (sent int, err error) {
+			monkey.Patch(notify.Notify, func(message string, c context.Context) (sent int, err error) {
 				notify_params = message
 				return test.fixture.notify.sent, test.fixture.notify.err
 			})
@@ -534,20 +424,6 @@ func TestRunChecks(t *testing.T) {
 			assert.Equal(st, test.expect.notify, notify_params, "Notify paramaters")
 		})
 	}
-}
-
-func TestAgeFunctions(t *testing.T) {
-	key := []byte(`# created: 2022-12-14T09:40:56+11:00
-# public key: age176vjsyk43d46tf5hcttcxe4kumzjxw4zrncmvemuxnt0kfvv7ffq4u7mlw
-AGE-SECRET-KEY-1UNDK53VGXQXXY6KNF7D865UW7Y4ADEJTRUPMEX9499AWCTSELMQSNCJU8P`)
-	a, err := loadAgeKey(key)
-	assert.Nil(t, err)
-	assert.NotNil(t, a)
-	assert.Equal(t, "age176vjsyk43d46tf5hcttcxe4kumzjxw4zrncmvemuxnt0kfvv7ffq4u7mlw", a.Recipient().String())
-
-	msg := `age:YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBKU2w4RmV5bndqMTJ3YW9oZi8rMm0xdjJ1N096VEVpekFsVzJaK2trM3kwCmtoMWQ1VElQUEovcWF3TnVSeXQ3b3l0WnZIOUdyZXU1aFl5WjBEK1pXdW8KLS0tIEdUcG0zUjNYWW5icGlPRFpITVNKcXY5MkVlZGdxR2VBTVNtMTI5Q0lvbGcK3TgMVBzvlx2f2/8xzmgW04VL1P83UyYdrODKq3TLinRgyTLFNd1xI08Sv0hEyio=`
-	dec := decodeAge(msg, a)
-	assert.Equal(t, "testing message", dec)
 }
 
 // func TestCheckRepay(t *testing.T) {

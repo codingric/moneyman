@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 	"testing"
+	"time"
 
 	"bou.ke/monkey"
 	fage "filippo.io/age"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/codingric/moneyman/pkg/age"
-	"github.com/rapidloop/skv"
+	"github.com/go-redis/redis/v8"
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -26,6 +28,7 @@ func (m MockRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err 
 
 func TestNotify(t *testing.T) {
 	zerolog.SetGlobalLevel(zerolog.Disabled)
+
 	config := `
 notify:
   sid: "sometihng"
@@ -43,11 +46,13 @@ store: "/tmp/test.db"`
 		message string
 		store   bool
 		twillio *H
+		wait    time.Duration
 	}
 	type E struct {
 		err       string
 		sent      int
 		httpcalls int
+		store     bool
 	}
 	type T struct {
 		name    string
@@ -57,48 +62,76 @@ store: "/tmp/test.db"`
 	tests := []T{
 		{
 			name:    "No config",
-			fixture: F{``, "no config", false, nil},
-			expect:  E{"unable to load settings", 0, 0},
+			fixture: F{config: ``, message: "no config"},
+			expect:  E{err: "unable to load settings"},
 		},
 		{
 			name:    "Exist store",
-			fixture: F{config, "Exist store", true, nil},
-			expect:  E{},
+			fixture: F{config: config, message: "Exist store", store: true},
+			expect:  E{sent: 0},
+		},
+		{
+			name:    "Test expired store",
+			fixture: F{config: config, message: "Expired store", store: true, wait: 3, twillio: &H{code: 201, body: []byte("OK")}},
+			expect:  E{sent: 1, httpcalls: 1, store: true},
 		},
 		{
 			name:    "HTTP error",
-			fixture: F{config, "HTTP error", false, &H{err: errors.New("something went wrong")}},
+			fixture: F{config: config, message: "HTTP error", twillio: &H{err: errors.New("something went wrong")}},
 			expect:  E{err: "failed to make request", httpcalls: 1},
 		},
 		{
-			name:    "Auth error",
-			fixture: F{config, "HTTP error", false, &H{code: 401, body: []byte("")}},
-			expect:  E{err: "authentication failure", httpcalls: 1},
+			name: "Auth error",
+			fixture: F{
+				config:  config,
+				message: "HTTP error",
+				twillio: &H{code: 401, body: []byte("")},
+			},
+			expect: E{err: "authentication failure", httpcalls: 1},
 		},
 		{
-			name:    "XML error",
-			fixture: F{config, "Other error", false, &H{code: 400, body: []byte(`<TwilioResponse><RestException><Code>30000</Code><Detail></Detail><Message>Fake Error</Message><MoreInfo>fake.com</MoreInfo><Status>400</Status></RestException></TwilioResponse>`)}},
-			expect:  E{err: "Fake Error", httpcalls: 1},
+			name: "XML error",
+			fixture: F{
+				config:  config,
+				message: "Other error",
+				twillio: &H{code: 400, body: []byte(`<TwilioResponse><RestException><Code>30000</Code><Detail></Detail><Message>Fake Error</Message><MoreInfo>fake.com</MoreInfo><Status>400</Status></RestException></TwilioResponse>`)},
+			},
+			expect: E{err: "Fake Error", httpcalls: 1},
 		},
 		{
-			name:    "Unmarshalble error",
-			fixture: F{config, "Unmarshalble error", false, &H{code: 400, body: []byte(`<<Tw~!!`)}},
-			expect:  E{err: "failed to read responses", httpcalls: 1},
+			name: "Unmarshalble error",
+			fixture: F{
+				config:  config,
+				message: "Unmarshalble error",
+				twillio: &H{code: 400, body: []byte(`<<Tw~!!`)},
+			},
+			expect: E{err: "failed to read responses", httpcalls: 1},
 		},
 		{
-			name:    "Other error",
-			fixture: F{config, "Other error", false, &H{code: 500, body: []byte("Server Error")}},
-			expect:  E{err: "twilio responded with failure", httpcalls: 1},
+			name: "Other error",
+			fixture: F{config: config,
+				message: "Other error",
+				twillio: &H{code: 500, body: []byte("Server Error")},
+			},
+			expect: E{err: "twilio responded with failure", httpcalls: 1},
 		},
 		{
-			name:    "Happy",
-			fixture: F{config, "Happy path", false, &H{code: 201, body: []byte("OK")}},
-			expect:  E{sent: 1, httpcalls: 1},
+			name: "Happy",
+			fixture: F{
+				config:  config,
+				message: "Happy path",
+				twillio: &H{code: 201, body: []byte("OK")},
+			},
+			expect: E{sent: 1, httpcalls: 1, store: true},
 		},
 		{
-			name:    "Dryrun",
-			fixture: F{config + "\ndryrun: true", "Dryrun", false, &H{code: 201, body: []byte("OK")}},
-			expect:  E{sent: 0, httpcalls: 0},
+			name: "Dryrun",
+			fixture: F{
+				config:  config + "\ndryrun: true",
+				message: "Dryrun",
+				twillio: &H{code: 201, body: []byte("OK")},
+			},
+			expect: E{sent: 0, httpcalls: 0},
 		},
 	}
 
@@ -107,20 +140,32 @@ store: "/tmp/test.db"`
 			defer monkey.UnpatchAll()
 			viper.SetConfigType("yaml")
 			viper.ReadConfig(bytes.NewBuffer([]byte(test.fixture.config)))
-			skvStore = &skv.KVStore{}
 			httpcalls := 0
 			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
 				httpcalls += 1
 				return &http.Response{StatusCode: test.fixture.twillio.code, Body: io.NopCloser(bytes.NewBuffer(test.fixture.twillio.body))}, test.fixture.twillio.err
 			})}
-			monkey.Patch(age.DecodeAge, func(s string, a *fage.X25519Identity) string { return s })
-			monkey.PatchInstanceMethod(reflect.TypeOf((*skv.KVStore)(nil)), "Get", func(*skv.KVStore, string, interface{}) error {
-				if test.fixture.store {
-					return nil
-				}
-				return errors.New("")
+			s := miniredis.RunT(t)
+			redisClient = redis.NewClient(&redis.Options{
+				Addr:     s.Addr(), // host:port of the redis server
+				Password: "",       // no password set
+				DB:       0,        // use default DB
 			})
-			monkey.PatchInstanceMethod(reflect.TypeOf((*skv.KVStore)(nil)), "Put", func(*skv.KVStore, string, interface{}) error { return nil })
+			monkey.Patch(generateHash, func(string) (s string) {
+				return "something"
+			})
+			if test.fixture.store {
+				s.Set("something", "something")
+				s.SetTTL("something", 1*time.Second)
+				s.FastForward(test.fixture.wait * time.Second)
+				if s.Exists("someting") {
+					tt.Error("shouldnt exist")
+				}
+			}
+			r, e := redisClient.Get(context.Background(), "something").Result()
+			fmt.Printf("\nsomething: %s, err: %v\n", r, e)
+
+			monkey.Patch(age.DecodeAge, func(s string, a *fage.X25519Identity) string { return s })
 
 			sent, err := Notify(test.fixture.message, context.Background())
 			if test.expect.err == "" {
@@ -131,6 +176,9 @@ store: "/tmp/test.db"`
 			}
 			assert.Equal(tt, test.expect.sent, sent)
 			assert.Equal(tt, test.expect.httpcalls, httpcalls)
+			if test.expect.store {
+				s.CheckGet(t, "something", "+6140000000")
+			}
 		})
 	}
 }

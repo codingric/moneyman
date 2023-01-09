@@ -13,7 +13,7 @@ import (
 
 	"github.com/codingric/moneyman/pkg/age"
 	"github.com/codingric/moneyman/pkg/tracing"
-	"github.com/rapidloop/skv"
+	"github.com/go-redis/redis/v8"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -23,21 +23,18 @@ import (
 )
 
 var (
-	httpClient *http.Client
-	skvStore   *skv.KVStore
+	httpClient  *http.Client
+	redisClient *redis.Client
 )
 
 func init() {
 	httpClient = &http.Client{}
 	httpClient.Transport = otelhttp.NewTransport(http.DefaultTransport)
-}
-
-func initStore() {
-	var err error
-	skvStore, err = skv.Open(viper.GetString("store"))
-	if err != nil {
-		log.Fatal().Err(err).Msg("Unable to init KV store")
-	}
+	redisClient = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379", // host:port of the redis server
+		Password: "",               // no password set
+		DB:       0,                // use default DB
+	})
 }
 
 type TwilioResponse struct {
@@ -74,10 +71,6 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 		return 0, fmt.Errorf("unable to load settings")
 	}
 
-	if skvStore == nil {
-		initStore()
-	}
-
 	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + settings.Sid + "/Messages"
 
 	for _, m := range settings.Mobiles {
@@ -87,8 +80,9 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 			"Body": []string{message},
 		}
 
-		hash := fmt.Sprintf("%x", md5.Sum([]byte(body.Encode())))
-		if err := skvStore.Get(hash, nil); err == nil {
+		hash := generateHash(body.Encode())
+		_, err := redisClient.Get(ctx, hash).Result()
+		if err != redis.Nil {
 			log.Info().Str("hash", hash).Msgf("Message already sent to %s", m)
 			span.AddEvent("Message already sent", trace.WithAttributes(
 				attribute.String("message", message),
@@ -97,7 +91,7 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 			))
 			continue
 		}
-		skvStore.Put(hash, m)
+		redisClient.Set(ctx, hash, m, 3600*24)
 
 		req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(body.Encode()))
 
@@ -155,4 +149,8 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 		}
 	}
 	return sent, nil
+}
+
+func generateHash(payload string) string {
+	return fmt.Sprintf("%x", md5.Sum([]byte(payload)))
 }

@@ -63,10 +63,8 @@ github.com/cncf/xds/go v0.0.0-20210312221358-fbca930ec8ed/go.mod h1:eXthEFrGJvWH
 github.com/cncf/xds/go v0.0.0-20210805033703-aa0b78936158/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/cncf/xds/go v0.0.0-20210922020428-25de7278fc84/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
-github.com/codingric/moneyman/pkg v0.0.0-20230108102012-3108c06b17a2 h1:p55j5D7oxvrk9vVOJoySi162ChcwHaDIJTwEr6AGtAk=
-github.com/codingric/moneyman/pkg v0.0.0-20230108102012-3108c06b17a2/go.mod h1:kbDx9fuaVS39W+PT9UQKAm2KtdlVeutc9QjDti+psNs=
-github.com/codingric/moneyman/pkg v0.0.0-20230108103902-1c91bc0ccb88 h1:V0AB5n/pCkLieLjTaNu4cv/3skXq46YwEW4XxSbVcJQ=
-github.com/codingric/moneyman/pkg v0.0.0-20230108103902-1c91bc0ccb88/go.mod h1:wZmysjlxAxZeN1V9iXDWCm5dQz0iM9iv1bo+A/dJKu4=
+github.com/codingric/moneyman/pkg v0.0.0-20230108111241-96ceeaa2a7b7 h1:BWb6YYpaqHTC14KCFiUlNPFyIyuITRc40H3fBj5m33w=
+github.com/codingric/moneyman/pkg v0.0.0-20230108111241-96ceeaa2a7b7/go.mod h1:wZmysjlxAxZeN1V9iXDWCm5dQz0iM9iv1bo+A/dJKu4=
 github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/coreos/go-systemd/v22 v22.3.3-0.20220203105225-a9a7ef127534/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

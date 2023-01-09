@@ -12,6 +12,15 @@ spec:
       template:
         spec:
           containers:
+            - name: redis
+              image: redis:7.0.7
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 62Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
             - name: auditor
               image: ghcr.io/codingric/moneyman/auditor
               env:
@@ -27,8 +36,6 @@ spec:
                 - "/etc/auditor/age.key"
                 - "--loglevel"
                 - "trace"
-                - "--store"
-                - "/var/run/auditor/store.db"
               imagePullPolicy: Always
               volumeMounts:
                 - mountPath: "/etc/auditor/config.yaml"
@@ -39,8 +46,6 @@ spec:
                   name: age
                   readOnly: true
                   subPath: age.key
-                - name: skv
-                  mountPath: /var/run/auditor/
               resources:
                 requests:
                   cpu: 100m
@@ -55,18 +60,4 @@ spec:
             - name: age
               secret:
                 secretName: moneyman-age-key
-            - name: skv
-              persistentVolumeClaim:
-                claimName: auditor-skv
           restartPolicy: Never
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: auditor-skv
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 3Gi

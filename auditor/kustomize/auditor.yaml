@@ -12,29 +12,24 @@ spec:
       template:
         spec:
           containers:
-            - name: redis
-              image: redis:7.0.7
-              resources:
-                requests:
-                  cpu: 100m
-                  memory: 62Mi
-                limits:
-                  cpu: 200m
-                  memory: 256Mi
             - name: auditor
               image: ghcr.io/codingric/moneyman/auditor
               env:
                 - name: TZ
                   value: "Australia/Melbourne"
-                - name: ASPECTO_KEY
+                - name: OTEL_GRPC_ENDPOINT
+                  value: "collector.aspecto.io:4317"
+                - name: OTEL_AUTH_KEY
                   valueFrom:
                     secretKeyRef:
                       name: aspecto-key
                       key: key
+                - name: REDIS_ADDRESS
+                  value: redis.default:6379
               args:
-                - "--agekey"
+                - "-a"
                 - "/etc/auditor/age.key"
-                - "--loglevel"
+                - "-l"
                 - "trace"
               imagePullPolicy: Always
               volumeMounts:

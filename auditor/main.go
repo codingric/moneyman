@@ -41,14 +41,17 @@ func LoadConf(ctx context.Context) error {
 	_, span := tracing.NewSpan("LoadConf", ctx)
 	defer span.End()
 	flag.Bool("dryrun", false, "Log instead of SMS")
-	flag.String("agekey", "/etc/auditor/age.key", "Age key")
-	flag.String("config", "/etc/auditor/config.yaml", "Config yaml")
-	flag.String("loglevel", zerolog.InfoLevel.String(), "trace|debug|info|error|fatal|panic|disabled")
-	flag.String("store", "/var/run/auditor/notifications.db", "Location for KV store")
+	flag.String("a", "/etc/auditor/age.key", "Age key")
+	flag.String("c", "/etc/auditor/config.yaml", "Config yaml")
+	flag.String("l", zerolog.InfoLevel.String(), "trace|debug|info|error|fatal|panic|disabled")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 	viper.BindPFlags(pflag.CommandLine)
+
+	viper.RegisterAlias("loglevel", "l")
+	viper.RegisterAlias("config", "c")
+	viper.RegisterAlias("agekey", "a")
 
 	cpath := viper.GetString("config")
 
@@ -97,7 +100,9 @@ func main() {
 	log.Logger = log.Logger.With().Str("trace_id", span.SpanContext().TraceID().String()).Logger()
 	defer span.End()
 
-	LoadConf(ctx)
+	if err := LoadConf(ctx); err != nil {
+		log.Fatal().Msg("Failed to load configuration")
+	}
 
 	if err := RunChecks(ctx); err != nil {
 		log.Fatal().Msgf("Failure: %s", err.Error())

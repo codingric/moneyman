@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 
+	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -14,36 +16,54 @@ import (
 )
 
 var ServiceName string
+var TracingProvider *sdktrace.TracerProvider
 
-func AspectoTraceProvider(servicename string) (*sdktrace.TracerProvider, error) {
-	exp, err := otlptracegrpc.New(context.Background(),
-		otlptracegrpc.WithEndpoint("collector.aspecto.io:4317"),
-		otlptracegrpc.WithHeaders(map[string]string{
-			"Authorization": os.Getenv("ASPECTO_KEY"),
-		}))
-	if err != nil {
-		return nil, err
-	}
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exp),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(servicename),
-			semconv.DeploymentEnvironmentKey.String("production"),
-		)),
-	)
-	return tp, nil
-}
-
-func InitTraceProvider(servicename string) (func(), error) {
+func InitTraceProvider(servicename string) (shutdown func(), err error) {
 	ServiceName = servicename
-	tp, e := AspectoTraceProvider(servicename)
-	if e != nil {
-		return nil, e
+
+	switch {
+	case os.Getenv("OTEL_GRPC_ENDPOINT") != "":
+		log.Info().Msg("New GRPC TraceProvider")
+		//"collector.aspecto.io:4317"
+		exp, err := otlptracegrpc.New(
+			context.Background(),
+			otlptracegrpc.WithEndpoint(os.Getenv("OTEL_GRPC_ENDPOINT")),
+			otlptracegrpc.WithHeaders(map[string]string{
+				"Authorization": os.Getenv("OTEL_AUTH_KEY"),
+			}),
+		)
+		if err != nil {
+			return nil, err
+		}
+		TracingProvider = sdktrace.NewTracerProvider(
+			sdktrace.WithBatcher(exp),
+			sdktrace.WithResource(resource.NewWithAttributes(
+				semconv.SchemaURL,
+				semconv.ServiceNameKey.String(servicename),
+				semconv.DeploymentEnvironmentKey.String("production"),
+			)),
+		)
+	case os.Getenv("OTEL_JAEGER_ENDPOINT") != "":
+		exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(os.Getenv("OTEL_JAEGER_ENDPOINT"))))
+		if err != nil {
+			return nil, err
+		}
+		TracingProvider = sdktrace.NewTracerProvider(
+			sdktrace.WithBatcher(exp),
+			sdktrace.WithResource(resource.NewWithAttributes(
+				semconv.SchemaURL,
+				semconv.ServiceNameKey.String(servicename),
+				semconv.DeploymentEnvironmentKey.String("production"),
+			)),
+		)
+
+		log.Info().Msg("New Jaeger TraceProvider")
 	}
-	otel.SetTracerProvider(tp)
+
+	otel.SetTracerProvider(TracingProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
-	return func() { tp.Shutdown(context.Background()) }, nil
+	shutdown = func() { TracingProvider.Shutdown(context.Background()) }
+	return
 }
 
 func NewSpan(name string, ctx context.Context) (context.Context, trace.Span) {

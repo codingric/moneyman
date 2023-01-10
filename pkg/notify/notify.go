@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/codingric/moneyman/pkg/age"
@@ -30,10 +31,14 @@ var (
 func init() {
 	httpClient = &http.Client{}
 	httpClient.Transport = otelhttp.NewTransport(http.DefaultTransport)
+	server := os.Getenv("REDIS_ADDRESS")
+	if server == "" {
+		server = "localhost:6379"
+	}
 	redisClient = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", // host:port of the redis server
-		Password: "",               // no password set
-		DB:       0,                // use default DB
+		Addr:     server, // host:port of the redis server
+		Password: "",     // no password set
+		DB:       0,      // use default DB
 	})
 }
 

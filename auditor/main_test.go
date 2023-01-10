@@ -73,17 +73,17 @@ AGE-SECRET-KEY-1UNDK53VGXQXXY6KNF7D865UW7Y4ADEJTRUPMEX9499AWCTSELMQSNCJU8P`
 	}{
 		{
 			name:    "Rubbish values",
-			fixture: []string{"--config", "/nonexistant/nonexistant.yaml"},
+			fixture: []string{"-c", "/nonexistant/nonexistant.yaml"},
 			expect:  E{err: "unable to load config: `/nonexistant/nonexistant.yaml`"},
 		},
 		{
 			name:    "invalid loglevel",
-			fixture: []string{"--config", confpath, "--loglevel", "invalid"},
+			fixture: []string{"-c", confpath, "-l", "invalid"},
 			expect:  E{log: "Ignoring --loglevel", err: "unable to load agekey: `/etc/auditor/age.key`"},
 		},
 		{
 			name:    "invalid key",
-			fixture: []string{"--config", confpath, "--loglevel", "debug", "--agekey", "/non/existant/age.key"},
+			fixture: []string{"-c", confpath, "-l", "debug", "-a", "/non/existant/age.key"},
 			expect:  E{err: "unable to load agekey: `/non/existant/age.key`"},
 		},
 	}

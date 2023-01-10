@@ -15,19 +15,21 @@ spec:
               env:
                 - name: TZ
                   value: "Australia/Melbourne"
-                - name: ASPECTO_KEY
+                - name: REDIS_ADDRESS
+                  value: redis.default:6379                  
+                - name: OTEL_GRPC_ENDPOINT
+                  value: "collector.aspecto.io:4317"
+                - name: OTEL_AUTH_KEY
                   valueFrom:
                     secretKeyRef:
                       name: aspecto-key
-                      key: key
+                      key: key    
               args:
                 - "-c"
                 - "/etc/bigbills/config.toml"
                 - "-v"
                 - "-a"
                 - "/etc/bigbills/age.key"
-                - "-s"
-                - "/var/run/bigbills/store.db"
               imagePullPolicy: Always
               volumeMounts:
                 - mountPath: "/etc/bigbills/config.toml"
@@ -38,8 +40,6 @@ spec:
                   name: age
                   readOnly: true
                   subPath: age.key
-                - name: skv
-                  mountPath: /var/run/bigbills/
           volumes:
             - name: config
               configMap:
@@ -47,18 +47,5 @@ spec:
             - name: age
               secret:
                 secretName: moneyman-age-key
-            - name: skv
-              persistentVolumeClaim:
-                claimName: bigbills-skv
           restartPolicy: Never
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: bigbills-skv
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 3Gi
+

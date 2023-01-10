@@ -199,9 +199,14 @@ func (b *BigBills) GetLate(ctx context.Context) (result []LateBigBill, err error
 
 func (p *BigBillDate) Repaid(ctx context.Context) (paid bool, err error) {
 	ctx, span := tracing.NewSpan("bigbilldate.repaid", ctx)
+	span.SetAttributes(
+		attribute.String("duedate", p.Date.Format("2006-01-02")),
+		attribute.Float64("amount", p.Amount),
+	)
 	defer span.End()
 	if p.Paid != nil {
 		paid = true
+		span.SetAttributes(attribute.String("paid", p.Paid.Format("2006-01-02")))
 		return
 	}
 	paid, err = p.CheckRepayments(ctx)
@@ -249,6 +254,12 @@ func (p *BigBillDate) CheckRepayments(ctx context.Context) (paid bool, err error
 	json.Unmarshal(rb, &result)
 	paid = len(result.Data) > 0
 	if paid {
+		span.AddEvent(
+			"Payment detected",
+			trace.WithAttributes(
+				attribute.Int("results.len", len(result.Data)),
+			),
+		)
 		p.UpdatePaid(result.Data[0].Created, ctx)
 	}
 	return

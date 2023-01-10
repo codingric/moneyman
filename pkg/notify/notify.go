@@ -75,6 +75,10 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 		span.SetStatus(codes.Error, "Unable to load settings")
 		return 0, fmt.Errorf("unable to load settings")
 	}
+	span.SetAttributes(
+		attribute.String("message", message),
+		attribute.StringSlice("mobiles", settings.Mobiles),
+	)
 
 	endpoint := "https://api.twilio.com/2010-04-01/Accounts/" + settings.Sid + "/Messages"
 
@@ -88,6 +92,12 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 		hash := generateHash(body.Encode())
 		_, err := redisClient.Get(ctx, hash).Result()
 		if err != redis.Nil {
+			if err != nil {
+				log.Error().Err(err).Send()
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "failure reaching redis")
+				return 0, fmt.Errorf("failure reaching redis")
+			}
 			log.Info().Str("hash", hash).Msgf("Message already sent to %s", m)
 			span.AddEvent("Message already sent", trace.WithAttributes(
 				attribute.String("message", message),

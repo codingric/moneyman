@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -47,6 +46,7 @@ store: "/tmp/test.db"`
 		store   bool
 		twillio *H
 		wait    time.Duration
+		redis   string
 	}
 	type E struct {
 		err       string
@@ -64,6 +64,11 @@ store: "/tmp/test.db"`
 			name:    "No config",
 			fixture: F{config: ``, message: "no config"},
 			expect:  E{err: "unable to load settings"},
+		},
+		{
+			name:    "redis host error",
+			fixture: F{config: config, message: "redis host error", redis: "nonexistant:12345"},
+			expect:  E{err: "failure reaching redis"},
 		},
 		{
 			name:    "Exist store",
@@ -145,14 +150,15 @@ store: "/tmp/test.db"`
 				httpcalls += 1
 				return &http.Response{StatusCode: test.fixture.twillio.code, Body: io.NopCloser(bytes.NewBuffer(test.fixture.twillio.body))}, test.fixture.twillio.err
 			})}
+			monkey.Patch(age.DecodeAge, func(s string, a *fage.X25519Identity) string { return s })
+			monkey.Patch(generateHash, func(string) (s string) {
+				return "something"
+			})
 			s := miniredis.RunT(t)
 			redisClient = redis.NewClient(&redis.Options{
 				Addr:     s.Addr(), // host:port of the redis server
 				Password: "",       // no password set
 				DB:       0,        // use default DB
-			})
-			monkey.Patch(generateHash, func(string) (s string) {
-				return "something"
 			})
 			if test.fixture.store {
 				s.Set("something", "something")
@@ -162,10 +168,13 @@ store: "/tmp/test.db"`
 					tt.Error("shouldnt exist")
 				}
 			}
-			r, e := redisClient.Get(context.Background(), "something").Result()
-			fmt.Printf("\nsomething: %s, err: %v\n", r, e)
-
-			monkey.Patch(age.DecodeAge, func(s string, a *fage.X25519Identity) string { return s })
+			if test.fixture.redis != "" {
+				redisClient = redis.NewClient(&redis.Options{
+					Addr:     test.fixture.redis, // host:port of the redis server
+					Password: "",                 // no password set
+					DB:       0,                  // use default DB
+				})
+			}
 
 			sent, err := Notify(test.fixture.message, context.Background())
 			if test.expect.err == "" {

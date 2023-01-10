@@ -35,11 +35,15 @@ func init() {
 	if server == "" {
 		server = "localhost:6379"
 	}
+
 	redisClient = redis.NewClient(&redis.Options{
 		Addr:     server, // host:port of the redis server
 		Password: "",     // no password set
 		DB:       0,      // use default DB
 	})
+	if _, err := redisClient.Ping(context.TODO()).Result(); err != nil {
+		log.Error().Err(err).Msg("Failed to connect to redis")
+	}
 }
 
 type TwilioResponse struct {
@@ -106,7 +110,6 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 			))
 			continue
 		}
-		redisClient.Set(ctx, hash, m, 3600*24)
 
 		req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(body.Encode()))
 
@@ -136,6 +139,7 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 				attribute.String("message", message),
 				attribute.String("number", m),
 			))
+			redisClient.Set(ctx, hash, m, 3600*24)
 			continue
 		case 401:
 			span.RecordError(err, trace.WithAttributes(

@@ -9,7 +9,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/gin-gonic/gin"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -23,14 +22,13 @@ var (
 
 func main() {
 	ctx := context.Background()
-	tp, tpErr := tracing.AspectoTraceProvider("backend")
-	defer tp.Shutdown(ctx)
+	shutdown, tpErr := tracing.InitTraceProvider("backend")
+	defer shutdown()
 
 	if tpErr != nil {
 		log.Fatal().Err(tpErr)
 	}
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+
 	tracer := otel.Tracer("")
 
 	_, span := tracer.Start(ctx, "main")

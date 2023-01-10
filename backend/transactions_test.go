@@ -31,7 +31,7 @@ func TestCreateTransaction(t *testing.T) {
 			"InvalidRequest",
 			[]byte{},
 			400,
-			`{"error":"EOF"}`,
+			`{"error":"Invalid request parameters"}`,
 		},
 		{
 			"Successful",
@@ -43,7 +43,7 @@ func TestCreateTransaction(t *testing.T) {
 			"Duplicate",
 			[]byte(`{"created":"2000-01-01T00:00:01+11:00","amount":"12.50","description":"test","account":"1234567890"}`),
 			400,
-			`{"error":{"Code":19,"ExtendedCode":2067,"SystemErrno":0}}`,
+			`{"error":"Failed to create transaction"}`,
 		},
 		{
 			"SameTime",

@@ -11,7 +11,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/gin-gonic/gin"
 )
@@ -92,7 +94,9 @@ func FindTransactions(c *gin.Context) {
 		span.SetStatus(codes.Error, "Unable to retreive data")
 		return
 	}
-
+	span.AddEvent("Transactions found", trace.WithAttributes(
+		attribute.Int("result.count", len(transactions)),
+	))
 	c.JSON(http.StatusOK, gin.H{"data": transactions})
 }
 
@@ -133,8 +137,10 @@ func CreateTransaction(c *gin.Context) {
 	// Validate input
 	var input CreateTransactionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		log.Error().Caller().Err(err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid request parameters")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request parameters"})
+		log.Error().Caller().Err(err).Msg("Invalid request parameters")
 		return
 	}
 
@@ -151,9 +157,14 @@ func CreateTransaction(c *gin.Context) {
 	result := DB.WithContext(ctx).Create(&transaction)
 
 	if result.Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": result.Error})
+		span.RecordError(result.Error)
+		span.SetStatus(codes.Error, "Failed to create transaction")
+		log.Error().Caller().Err(result.Error).Msg("Failed to create transaction")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create transaction"})
 		return
 	}
-
+	span.AddEvent("Transaction created", trace.WithAttributes(
+		attribute.String("data", fmt.Sprintf("%v", transaction)),
+	))
 	c.JSON(http.StatusOK, gin.H{"data": transaction})
 }

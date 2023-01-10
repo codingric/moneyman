@@ -69,7 +69,9 @@ spec:
           env:
             - name: TZ
               value: "Australia/Melbourne"
-            - name: ASPECTO_KEY
+            - name: OTEL_GRPC_ENDPOINT
+              value: "collector.aspecto.io:4317"
+            - name: OTEL_AUTH_KEY
               valueFrom:
                 secretKeyRef:
                   name: aspecto-key

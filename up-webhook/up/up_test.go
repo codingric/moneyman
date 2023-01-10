@@ -1,14 +1,22 @@
-package main
+package up
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMain(m *testing.M) {
+	zerolog.SetGlobalLevel(zerolog.PanicLevel)
+	os.Exit(m.Run())
+}
 
 type mockService struct {
 	Returner func(req *http.Request) (*http.Response, error)
@@ -90,7 +98,7 @@ func Test_UpTransactionGet(t *testing.T) {
 			UpService = mock
 
 			var trans UpTransaction
-			err := trans.Get(test.setup.data_id)
+			err := trans.Get(test.setup.data_id, context.Background())
 			if test.expected.err != "" {
 				if assert.NotNil(tt, err) {
 					assert.Equal(tt, test.expected.err, err.Error())

@@ -1,7 +1,8 @@
-package main
+package up
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +10,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/codingric/moneyman/pkg/tracing"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type UpData struct {
@@ -96,39 +102,55 @@ var (
 	UpService UpServicer = &upService{client: http.DefaultClient}
 )
 
-func (t *UpTransaction) Get(id string) error {
+func init() {
+	UpService = &upService{client: &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}}
+}
+
+func (t *UpTransaction) Get(id string, ctx context.Context) error {
+	ctx, span := tracing.NewSpan("UpTransaction.Get", ctx)
+	defer span.End()
+
+	span.SetAttributes(attribute.String("id", id))
+
 	if id == "" {
 		return errors.New("Transaction.Get requires id")
 	}
 	url := fmt.Sprintf("https://api.up.com.au/api/v1/transactions/%s", id)
-	req, _ := http.NewRequest("GET", url, bytes.NewBuffer([]byte(``)))
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, bytes.NewBuffer([]byte(``)))
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", viper.GetString("bearer")))
 
 	resp, err := UpService.Do(req)
 	if err != nil {
-		logger.Error("Failed to get transaction (%s): %s", id, err.Error())
+		span.RecordError(err)
+		span.SetStatus(codes.Error, fmt.Sprintf("Failure while requesting Transaction(%s)", id))
+		log.Error().Msgf("Failed to get transaction (%s): %s", id, err.Error())
 		return fmt.Errorf("Failure while requesting Transaction(%s)", id)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		logger.Error("Failed StatusCode transaction (%s): %d", id, resp.StatusCode)
+		log.Error().Msgf("Failed StatusCode transaction (%s): %d", id, resp.StatusCode)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, fmt.Sprintf("Failure StatusCode while requsting Transaction(%s): %d", id, resp.StatusCode))
 		return fmt.Errorf("Failure StatusCode while requsting Transaction(%s): %d", id, resp.StatusCode)
 	}
 
 	resp_bytes, _ := ioutil.ReadAll(resp.Body)
-	logger.Debug("Response: %s", string(resp_bytes))
+	log.Debug().Msgf("Response: %s", string(resp_bytes))
 
 	if err := json.Unmarshal(resp_bytes, &t); err != nil {
-		logger.Error("Failure parsing response: Transaction(%s) - %s", id, err.Error())
+		span.RecordError(err)
+		span.SetStatus(codes.Error, fmt.Sprintf("Failure parsing response for Transaction(%s)", id))
+		log.Error().Msgf("Failure parsing response: Transaction(%s) - %s", id, err.Error())
 		return fmt.Errorf("Failure parsing response for Transaction(%s)", id)
 	}
 
 	if t.Data.Id == "" {
-		logger.Error("Response not valid")
+		span.SetStatus(codes.Error, fmt.Sprintf("Failure retrieving data for Transaction(%s)", id))
+		log.Error().Msg("Response not valid")
 		return fmt.Errorf("Failure retrieving data for Transaction(%s)", id)
 	}
 
-	logger.Debug("Transaction: %v", t)
+	log.Debug().Msgf("Transaction: %v", t)
 
 	return nil
 }

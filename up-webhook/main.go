@@ -1,37 +1,34 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
 
-	"github.com/ian-kent/go-log/layout"
-	"github.com/ian-kent/go-log/levels"
-	"github.com/ian-kent/go-log/log"
-
+	"github.com/codingric/moneyman/pkg/tracing"
+	"github.com/codingric/moneyman/up-webhook/webhook"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
-var logger = log.Logger()
-
-func init() {
-	layout.DefaultTimeLayout = "2006-01-02 15:04:05"
-	logger.Appender().SetLayout(layout.Pattern("%d %p %m"))
-	logger.SetLevel(levels.INFO)
-}
-
 func main() {
+	ctx := context.Background()
+	shutdown, tpErr := tracing.InitTraceProvider(path.Base(os.Args[0]))
+	if tpErr != nil {
+		log.Fatal().Err(tpErr)
+	}
+	defer shutdown()
+	ctx, span := tracing.NewSpan("main", ctx)
+	log.Logger = log.Logger.With().Str("trace_id", span.SpanContext().TraceID().String()).Logger()
+	defer span.End()
+
 	if err := Configure(); err != nil {
-		CrashAndBurn(err.Error())
+		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
-	if err := RunWebhook(); err != nil {
-		CrashAndBurn(err.Error())
+	if err := webhook.RunWebhook(ctx); err != nil {
+		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
-
-}
-
-func CrashAndBurn(message string) {
-	logger.Fatal("Fatal: %s", message)
 }
 
 func Configure() error {
@@ -43,15 +40,15 @@ func Configure() error {
 	viper.AddConfigPath(fmt.Sprintf("/etc/%s/", path.Base(os.Args[0])))
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			logger.Warn("Config not found - using defaults")
+			log.Warn().Msg("Config not found - using defaults")
 			return nil
 		} else {
-			logger.Error("Failed to load config")
+			log.Error().Msg("Failed to load config")
 		}
 		return err
 	}
-	logger.SetLevel(log.Stol(viper.GetString("log_level")))
-	logger.Debug("Config loaded `%s`", viper.ConfigFileUsed())
+	//log.SetLevel().Msg(log.Stol(viper.GetString("log_level")))
+	log.Debug().Msgf("Config loaded `%s`", viper.ConfigFileUsed())
 
 	return nil
 }

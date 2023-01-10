@@ -1,7 +1,8 @@
-package main
+package webhook
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -9,13 +10,22 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"testing"
 
 	"bou.ke/monkey"
+	"github.com/codingric/moneyman/up-webhook/backend"
+	"github.com/codingric/moneyman/up-webhook/up"
+	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMain(m *testing.M) {
+	zerolog.SetGlobalLevel(zerolog.PanicLevel)
+	os.Exit(m.Run())
+}
 
 func Test_validateSignature(t *testing.T) {
 	type I struct {
@@ -77,12 +87,12 @@ func Test_WebhookHandler(t *testing.T) {
 		validsigerr  bool
 		ioutilerr    bool
 		trans_err    bool
-		trans_result *UpTransaction
+		trans_result *up.UpTransaction
 		backend_err  bool
 	}
 	type expected struct {
 		trans_id    string
-		backend_obj *BackendTransaction
+		backend_obj *backend.BackendTransaction
 		resp_body   string
 		resp_code   int
 	}
@@ -144,8 +154,8 @@ func Test_WebhookHandler(t *testing.T) {
 					return []byte{}, errors.New("mock error")
 				})
 			}
-			var tr *UpTransaction
-			monkey.PatchInstanceMethod(reflect.TypeOf(tr), "Get", func(t *UpTransaction, id string) error {
+			var tr *up.UpTransaction
+			monkey.PatchInstanceMethod(reflect.TypeOf(tr), "Get", func(t *up.UpTransaction, id string, c context.Context) error {
 				if test.setup.trans_err {
 					return fmt.Errorf("Get(t=%v, id=%s)", t, id)
 				}
@@ -155,8 +165,8 @@ func Test_WebhookHandler(t *testing.T) {
 				return nil
 			})
 
-			var be *BackendTransaction
-			monkey.PatchInstanceMethod(reflect.TypeOf(be), "Post", func(b *BackendTransaction) error {
+			var be *backend.BackendTransaction
+			monkey.PatchInstanceMethod(reflect.TypeOf(be), "Post", func(b *backend.BackendTransaction, c context.Context) error {
 				if test.expected.backend_obj != nil {
 					assert.Equal(tt, *test.expected.backend_obj, *b)
 				}
@@ -205,7 +215,7 @@ func Test_RunWebhook(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
-			monkey.Patch(http.HandleFunc, func(pattern string, handler func(http.ResponseWriter, *http.Request)) {})
+			monkey.Patch(http.Handle, func(pattern string, handler http.Handler) {})
 			viper.Set("port", test.inputs.port)
 			monkey.Patch(http.ListenAndServe, func(addr string, handler http.Handler) error {
 				assert.Equal(tt, test.expected.addr, addr)
@@ -215,7 +225,7 @@ func Test_RunWebhook(t *testing.T) {
 				return nil
 			})
 
-			result := RunWebhook()
+			result := RunWebhook(context.Background())
 
 			if test.inputs.err {
 				assert.NotNil(tt, result)

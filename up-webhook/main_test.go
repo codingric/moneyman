@@ -1,17 +1,19 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"testing"
 
 	"bou.ke/monkey"
-	"github.com/ian-kent/go-log/levels"
+	"github.com/codingric/moneyman/up-webhook/webhook"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
-	logger.SetLevel(levels.FATAL)
+	zerolog.SetGlobalLevel(zerolog.PanicLevel)
 	os.Exit(m.Run())
 }
 
@@ -55,12 +57,6 @@ func Test_Main(t *testing.T) {
 				}
 			}()
 
-			monkey.Patch(CrashAndBurn, func(m string) {
-				assert.Equal(tt, test.expected.logs, m)
-				assert.True(tt, true, test.expected.fatal)
-				panic(m)
-			})
-
 			monkey.Patch(Configure, func() error {
 				if test.setup.configure {
 					return errors.New("mock error")
@@ -68,7 +64,7 @@ func Test_Main(t *testing.T) {
 				return nil
 			})
 
-			monkey.Patch(RunWebhook, func() error {
+			monkey.Patch(webhook.RunWebhook, func(context.Context) error {
 				if test.setup.runserver {
 					return errors.New("mock error")
 				}

@@ -1,18 +1,31 @@
-package main
+package backend
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"reflect"
+	"os"
 	"testing"
 	"time"
 
 	"bou.ke/monkey"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMain(m *testing.M) {
+	zerolog.SetGlobalLevel(zerolog.PanicLevel)
+	os.Exit(m.Run())
+}
+
+type MockRoundTripper func(req *http.Request) (res *http.Response, err error)
+
+func (m MockRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
+	return m(req)
+}
 
 func Test_BackendTransaction(t *testing.T) {
 	type setup struct {
@@ -48,12 +61,7 @@ func Test_BackendTransaction(t *testing.T) {
 		{
 			"FailedResponse",
 			setup{transaction: &BackendTransaction{}, doerr: true},
-			expected{err: "http.Client.Do error"},
-		},
-		{
-			"FailedResponse",
-			setup{transaction: &BackendTransaction{}, doerr: true},
-			expected{err: "http.Client.Do error"},
+			expected{err: `Post "": http.Client.Do error`},
 		},
 		{
 			"Non200Status",
@@ -75,30 +83,28 @@ func Test_BackendTransaction(t *testing.T) {
 		t.Run(test.name, func(tt *testing.T) {
 
 			var req_guard *monkey.PatchGuard
-			req_guard = monkey.Patch(http.NewRequest, func(method string, url string, body io.Reader) (r *http.Request, e error) {
+			req_guard = monkey.Patch(http.NewRequestWithContext, func(c context.Context, method string, url string, body io.Reader) (r *http.Request, e error) {
 				if test.setup.requesterr {
-					e = errors.New("http.NewRequest error")
+					return r, errors.New("http.NewRequest error")
 				} else {
 					req_guard.Unpatch()
 					defer req_guard.Restore()
 					return http.NewRequest(method, url, body)
 				}
-				return
 			})
-
-			monkey.PatchInstanceMethod(reflect.TypeOf(http.DefaultClient), "Do", func(c *http.Client, req *http.Request) (r *http.Response, e error) {
+			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
 				if test.expected.reqbody != "" {
 					body, _ := ioutil.ReadAll(req.Body)
 					assert.Equal(tt, test.expected.reqbody, string(body))
 				}
 				if test.setup.doerr {
-					e = errors.New("http.Client.Do error")
+					err = errors.New("http.Client.Do error")
 				}
-				r = &http.Response{StatusCode: test.setup.statuscode, Body: ioutil.NopCloser(bytes.NewBufferString("{}"))}
+				res = &http.Response{StatusCode: test.setup.statuscode, Body: ioutil.NopCloser(bytes.NewBufferString("{}"))}
 				return
-			})
+			})}
 
-			err := test.setup.transaction.Post()
+			err := test.setup.transaction.Post(context.Background())
 			monkey.UnpatchAll()
 
 			if test.expected.err != "" && assert.NotNil(tt, err) {

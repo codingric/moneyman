@@ -50,6 +50,8 @@ metadata:
   labels:
     app: moneyman-mailparser
 spec:
+  strategy:
+    type: "Recreate"
   selector:
     matchLabels:
       app: moneyman-mailparser

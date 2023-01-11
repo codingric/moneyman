@@ -28,13 +28,10 @@ func (m MockRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err 
 func TestNotify(t *testing.T) {
 	zerolog.SetGlobalLevel(zerolog.Disabled)
 
-	config := `
-notify:
-  sid: "sometihng"
-  token: "something"
-  mobiles:
-  - "+6140000000"
-store: "/tmp/test.db"`
+	config := `[notify]
+sid = "twilliosid"
+token = "twiliotoken"
+mobiles = ["+6140000000"]`
 	type H struct {
 		body []byte
 		code int
@@ -143,7 +140,7 @@ store: "/tmp/test.db"`
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
 			defer monkey.UnpatchAll()
-			viper.SetConfigType("yaml")
+			viper.SetConfigType("toml")
 			viper.ReadConfig(bytes.NewBuffer([]byte(test.fixture.config)))
 			httpcalls := 0
 			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
@@ -183,8 +180,8 @@ store: "/tmp/test.db"`
 				assert.Error(tt, err)
 				assert.EqualError(tt, err, test.expect.err)
 			}
-			assert.Equal(tt, test.expect.sent, sent)
-			assert.Equal(tt, test.expect.httpcalls, httpcalls)
+			assert.Equal(tt, test.expect.sent, sent, "Sent messages")
+			assert.Equal(tt, test.expect.httpcalls, httpcalls, "HTTP calls")
 			if test.expect.store {
 				s.CheckGet(t, "something", "+6140000000")
 			}

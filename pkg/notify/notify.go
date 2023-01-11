@@ -112,7 +112,8 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 		}
 
 		req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(body.Encode()))
-
+		req.Header.Add("Accept", "application/json")
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 		req.SetBasicAuth(settings.Sid, settings.Token)
 
 		if viper.GetBool("dryrun") {

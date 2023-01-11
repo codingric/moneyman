@@ -27,12 +27,12 @@ func main() {
 
 	message, err := bills.CheckLate(ctx)
 	if err != nil {
-		panic(err.Error())
+		log.Fatal().Err(err).Send()
 	}
 
 	if message != "" {
-		if resp, e := notify.Notify(message, ctx); e != nil {
-			panic(resp)
+		if _, e := notify.Notify(message, ctx); e != nil {
+			log.Fatal().Err(e).Send()
 		}
 	}
 }

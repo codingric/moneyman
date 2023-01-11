@@ -65,8 +65,8 @@ github.com/cncf/xds/go v0.0.0-20210312221358-fbca930ec8ed/go.mod h1:eXthEFrGJvWH
 github.com/cncf/xds/go v0.0.0-20210805033703-aa0b78936158/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/cncf/xds/go v0.0.0-20210922020428-25de7278fc84/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
-github.com/codingric/moneyman/pkg v0.0.0-20230110103311-6beb43ef10e4 h1:ELKVfR4zfXp4bgmGFmnzhdUfIfkXV5qEnN+t7PfOKzo=
-github.com/codingric/moneyman/pkg v0.0.0-20230110103311-6beb43ef10e4/go.mod h1:v8YABpsGM3ltqDxZVCtiF+PHQCMqLQpB6L4cAL+P51o=
+github.com/codingric/moneyman/pkg v0.0.0-20230111005122-16fca6f6e9b7 h1:GlmA600ZkW+YL4rkFYVNER4t5NDnXoqWJO/u25v3ZCE=
+github.com/codingric/moneyman/pkg v0.0.0-20230111005122-16fca6f6e9b7/go.mod h1:v8YABpsGM3ltqDxZVCtiF+PHQCMqLQpB6L4cAL+P51o=
 github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/coreos/go-systemd/v22 v22.3.3-0.20220203105225-a9a7ef127534/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

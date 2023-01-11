@@ -14,6 +14,7 @@ import (
 
 	"github.com/codingric/moneyman/pkg/age"
 	"github.com/codingric/moneyman/pkg/tracing"
+	"github.com/go-redis/redis/extra/redisotel/v8"
 	"github.com/go-redis/redis/v8"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -44,6 +45,8 @@ func init() {
 	if _, err := redisClient.Ping(context.TODO()).Result(); err != nil {
 		log.Error().Err(err).Msg("Failed to connect to redis")
 	}
+	redisClient.AddHook(redisotel.NewTracingHook())
+
 }
 
 type TwilioResponse struct {
@@ -140,7 +143,11 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 				attribute.String("message", message),
 				attribute.String("number", m),
 			))
-			redisClient.Set(ctx, hash, m, 3600*24)
+			if _, e := redisClient.Set(ctx, hash, m, 3600*24).Result(); e != nil {
+				log.Error().Err(e).Msg("Failed to save hash to redis")
+				continue
+			}
+			log.Debug().Str("hash", hash).Msg("Saved hash")
 			continue
 		case 401:
 			span.RecordError(err, trace.WithAttributes(

@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	bou.ke/monkey v1.0.2
-	github.com/codingric/moneyman/pkg v0.0.0-20230111044632-1d9ef7192498
+	github.com/codingric/moneyman/pkg v0.0.0-20230111051501-0cb3f2cc72a6
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.14.0

@@ -201,7 +201,6 @@ func QueryBackend(params map[string]string, ctx context.Context) (result APIResp
 	log.Trace().Str("params", p.Encode()).Msg("Query backend")
 
 	resp, err := httpClient.Do(req)
-	//resp, err := otelhttp.NewTransport(http.DefaultTransport).RoundTrip(req)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to query backend")
 		return
@@ -228,9 +227,15 @@ func QueryBackend(params map[string]string, ctx context.Context) (result APIResp
 func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
 	ctx, span := tracing.NewSpan("CheckAmount", ctx)
 	defer span.End()
-	var s strings.Builder
-	json.NewEncoder(&s).Encode(c)
-	span.SetAttributes(attribute.String("check", s.String()))
+
+	span.SetAttributes(
+		attribute.String("check.match", c.Match),
+		attribute.String("check.name", c.Name),
+		attribute.String("check.rrule", c.Rrule),
+		attribute.String("check.threshold", c.Threshold),
+		attribute.Float64("check.expected", c.Expected),
+		attribute.Int("check.days", c.Days),
+	)
 
 	past := time.Now().AddDate(0, 0, -c.Days)
 	var expected time.Time
@@ -248,6 +253,7 @@ func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
 
 		if time.Now().After(past.AddDate(0, 0, c.Days*2)) {
 			log.Info().Msgf("Skipping '%s' as outside of dates", c.Name)
+			span.SetAttributes(attribute.String("result", "Skipping: outside of dates"))
 			return "", nil
 		}
 	}
@@ -289,17 +295,19 @@ func CheckAmount(c Amount, ctx context.Context) (msg string, err error) {
 				math.Abs(float64(t.Amount)),
 				math.Abs(c.Expected),
 			)
+			span.SetAttributes(attribute.String("result", msg))
 		}
 		return
 	}
 
-	if c.Rrule != "" && time.Now().After(expected) {
+	if c.Rrule != "" && time.Now().After(expected.Add(24*time.Hour)) {
 		msg = fmt.Sprintf(
 			"Payment for %s ($%0.2f) overdue %d days",
 			c.Name,
 			math.Abs(c.Expected),
 			int(time.Since(expected).Hours()/24),
 		)
+		span.SetAttributes(attribute.String("result", msg))
 	}
 
 	return

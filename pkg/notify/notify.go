@@ -144,7 +144,7 @@ func Notify(message string, ctx context.Context) (sent int, err error) {
 				attribute.String("message", message),
 				attribute.String("number", m),
 			))
-			if _, e := redisClient.Set(ctx, hash, m, 3600*24*time.Second).Result(); e != nil {
+			if _, e := redisClient.Set(ctx, hash, m, time.Hour*24).Result(); e != nil {
 				log.Error().Err(e).Msg("Failed to save hash to redis")
 				continue
 			}

@@ -39,6 +39,7 @@ mobiles = ["+6140000000"]`
 	}
 	type F struct {
 		config  string
+		setup   func()
 		message string
 		store   bool
 		twillio *H
@@ -129,7 +130,8 @@ mobiles = ["+6140000000"]`
 		{
 			name: "Dryrun",
 			fixture: F{
-				config:  config + "\ndryrun: true",
+				config:  config,
+				setup:   func() { viper.Set("dryrun", true) },
 				message: "Dryrun",
 				twillio: &H{code: 201, body: []byte("OK")},
 			},
@@ -142,6 +144,10 @@ mobiles = ["+6140000000"]`
 			defer monkey.UnpatchAll()
 			viper.SetConfigType("toml")
 			viper.ReadConfig(bytes.NewBuffer([]byte(test.fixture.config)))
+			if test.fixture.setup != nil {
+				test.fixture.setup()
+			}
+
 			httpcalls := 0
 			httpClient = &http.Client{Transport: MockRoundTripper(func(req *http.Request) (res *http.Response, err error) {
 				httpcalls += 1

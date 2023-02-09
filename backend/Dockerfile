@@ -12,7 +12,7 @@ COPY . .
 
 RUN CGO_ENABLED=1 go build -o backend -x
 
-FROM alpine:3.16
+FROM alpine:3.17
 LABEL org.opencontainers.image.source https://github.com/codingric/moneyman
 
 RUN apk add tzdata \

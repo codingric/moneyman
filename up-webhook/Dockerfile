@@ -10,7 +10,7 @@ RUN go mod download -x
 COPY . .
 RUN go build -o up-webhook
 
-FROM alpine:3.14
+FROM alpine:3.16
 LABEL org.opencontainers.image.source https://github.com/codingric/moneyman
 
 RUN apk add tzdata \
